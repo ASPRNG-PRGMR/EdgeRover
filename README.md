@@ -140,7 +140,7 @@ This is an active area of exploration — V2 design decisions will be documented
 ## Images / Demo
 
 > 📸 *Bot photo*
-> `![EdgeRover V1](assets/images/car.jpg)`
+> ![EdgeRover V1](assets/images/car.jpg)
 
 > 🔌 *Wiring diagram*
 > `![Wiring Diagram](assets/diagrams/wiring.png)`

@@ -1,210 +1,171 @@
 # EdgeRover 🤖
 
-A 4-wheeled robot with onboard edge AI — Bluetooth RC in V1, autonomous obstacle avoidance and person tracking via ESP32-CAM in V2.
+A 4-wheeled robot learning to drive itself — starting with a human on the stick, ending with [EdgeCV](https://github.com/) doing the thinking.
 
-> **Current Status:** V1 complete. V2 in progress.
+> **Current Status:** ESP-NOW control layer done and flying. Vision integration next.
 
 ---
 
 ## Overview
 
-EdgeRover is a ground-up hardware + firmware project built in two phases.
+EdgeRover is a ground-up hardware + firmware project. The current build: a purpose-built **ESP-NOW link between two ESP32s** — a handheld transmitter with real analog control (potentiometer speed, rotary-encoder steering) talking to a receiver that drives a **TB6612FNG** with actual PWM, not just direction pins.
 
-**V1 (complete):** A Bluetooth-controlled RC car where an ESP32 receives D-pad input from a gamepad via Bluepad32 and drives four DC motors through an L298N motor driver using a differential (tank) steering model.
+This isn't just a wiring project — it's the interface the autonomous stack needs. The receiver speaks a simple, stable language: *left wheel PWM, right wheel PWM.* That's exactly the shape of output a vision model produces too.
 
-**V2 (in progress):** The remote control gets replaced entirely. An ESP32-CAM module mounted on the bot will run lightweight computer vision models directly on the microcontroller — no external PC, no cloud, no phone. The goal is a robot that can navigate its environment and track a person autonomously, powered entirely by edge inference on a $10 module.
+**Next (in progress):** Swap the transmitter for [EdgeCV](https://github.com/) — the onboard ESP32-CAM classifier that's already proven it can run real-time int8 inference on a $10 microcontroller. Same receiver, same packet contract, different brain. **This is the point of the whole build: EdgeRover is where EdgeCV's proof-of-concept stops being a bench demo and starts driving a real machine around a real room.**
 
-**Why this matters:** Running CV inference on a microcontroller is a real constraint problem. The ESP32-CAM has 520KB of SRAM and no GPU. Every model decision — architecture, quantization, resolution — has to be made with that in mind. That's what makes V2 an interesting engineering challenge, not just a wiring project.
+---
+
+## Why it's built this way
+
+- **Speed control** means every start is a controlled ramp, not a full-current lurch — fine for a joystick, a liability for a vision loop making dozens of decisions a second.
+- **ESP-NOW** is a low-latency, connectionless link purpose-fit for a robot that needs to take commands from its own onboard model, not just a human with a gamepad.
+- The packet format is built around left-speed/right-speed, not stick axes — exactly the output a classifier or a nav stack actually wants to emit. The receiver doesn't know or care whether those numbers came from a knob or a model.
 
 ---
 
 ## Roadmap
 
-### ✅ V1 — Bluetooth RC Car (Complete)
-- ESP32 + Bluepad32 receiving gamepad input over Bluetooth
-- L298N motor driver controlling 4 DC motors
-- Tank steering (differential drive) — no servo required
-- Fully wireless and battery powered
+### ✅ ESP-NOW Control Link (Complete)
+- Dedicated transmitter ↔ receiver pair over ESP-NOW (no phone, no BT stack)
+- Potentiometer sets a shared PWM speed ceiling (0–255) — softer starts, no more current-spike lurch
+- Rotary encoder provides differential steering: turning only slows the *inner* wheel, outer wheel holds the ceiling
+- Encoder's built-in pushbutton doubles as arm/disarm (debounced press-to-toggle)
+- ILI9225 status screen: armed state, speed %, steering %, raw L/R PWM
+- TB6612FNG driven with real LEDC PWM (20 kHz / 8-bit), replacing tied-HIGH direction-only control
+- `ControlPacket` designed around `leftPWM`/`rightPWM` — receiver doesn't know or care where the numbers came from
 
-### 🔧 V2 — Autonomous Navigation (In Progress)
-- ESP32-CAM module mounted on chassis for onboard vision
-- **Obstacle avoidance** — detect and react to objects in the path in real time
-- **Person tracking** — identify and follow a person using a lightweight detection model
-- Both behaviors running on-device (no cloud, no external compute)
-- Exploring TinyML / model quantization to fit inference within ESP32-CAM constraints
-
----
-
-## Features (V1)
-
-- 🎮 Bluetooth gamepad control via Bluepad32
-- ⬆️ D-pad based movement — forward, backward, left, right
-- ⚙️ Tank steering (differential drive) — pivot turns, no servo needed
-- 🔋 Fully wireless and battery-powered
-
----
-
-## Hardware Components
-
-| Component | Details |
-|-----------|---------|
-| Microcontroller | ESP32 (38-pin DevKit) |
-| Camera Module *(V2)* | ESP32-CAM (OV2640) |
-| Motor Driver | L298N Dual H-Bridge |
-| Motors | 4× TT DC Gear Motors (3–6V) |
-| Chassis | 4WD Robot Car Chassis Kit |
-| Power | 7.4V Li-ion battery pack (2S) |
-| Controller *(V1)* | Any Bluepad32-compatible Bluetooth gamepad |
-| Misc | Jumper wires, breadboard, screws, standoffs |
-
----
-
-## Working Principle
-
-**V1:**
-```
-Gamepad (Bluetooth) → ESP32 (Bluepad32) → L298N Motor Driver → DC Motors
-```
-
-**V2 (planned):**
-```
-ESP32-CAM (capture frame) → CV model inference (on-device) → Motor commands → L298N → DC Motors
-```
-
-In V2, the control loop is fully closed on the robot itself. The camera captures a frame, the model runs inference to detect obstacles or a person, and the output directly maps to motor commands — all within the ESP32-CAM.
+### 🔧 Autonomous Handoff (In Progress)
+- Port EdgeCV's onboard classifier output into the same `leftPWM`/`rightPWM` packet contract
+- Obstacle avoidance and person-tracking behaviors driving the rover directly, no transmitter in the loop
+- Manual override retained (arm/disarm + a mode bit already exist in the packet for exactly this)
 
 ---
 
 ## Drive Architecture
 
-EdgeRover uses a **differential drive (tank steering)** model:
+Differential (tank) drive — two independently driven sides, pivot turns, no steering servo. What matters is how each side's speed gets decided:
 
-- The 4 motors are split into **two independent groups** — left side and right side
-- All left motors are wired together and treated as a single unit
-- All right motors are wired together and treated as a single unit
-- Turning is achieved by driving one side forward and the other backward
-- The bot pivots on the spot — no steering servo required
+```
+Transmitter                          Receiver
+------------                         --------
+pot        -> speed ceiling (0-255)
+encoder    -> steering offset   \
+                                  +-> leftPWM, rightPWM  --[ESP-NOW]-->  ledcWrite(PWMA/B)
+encoder SW -> armed latch       /                                       TB6612FNG -> motors
+```
 
-This is the same steering model used in tracked vehicles, combat robots, and most autonomous ground robots. It also simplifies V2: the autonomous controller only needs to output left-speed and right-speed to steer, exactly like the gamepad does in V1.
+The steering math: outer wheel always gets the full ceiling; inner wheel gets `ceiling × (1 − |steps| / max_steps)`, floor at 0 for a full-lock pivot. Simple, predictable, and just arithmetic on two numbers — it doesn't care where they came from.
 
 ---
 
-## Control Logic (V1)
+## Hardware
 
-| D-pad Input | Left Motors | Right Motors | Result |
-|-------------|-------------|--------------|--------|
-| Up | Forward | Forward | Move forward |
-| Down | Backward | Backward | Move backward |
-| Left | Backward | Forward | Pivot left |
-| Right | Forward | Backward | Pivot right |
-| None | Stop | Stop | Idle |
+| Component | Details |
+|---|---|
+| Link | ESP-NOW, dual ESP32 |
+| Motor driver | TB6612FNG |
+| Speed control | PWM, 0–255, pot-limited ceiling |
+| Steering input | Rotary encoder (detented) |
+| Arm/disarm | Encoder pushbutton, debounced toggle |
+| Status feedback | ILI9225 SPI TFT |
+| Chassis | 4WD kit |
+| Power | 6V NiMH (4s) |
+
+---
+
+## Repository Structure
+
+```
+EdgeRover/
+├── README.md
+├── devlog.md
+└── images/
+│   ├── car.jpg
+│   └── controller.jpg
+│
+└── src/
+    ├── motor_control/ 
+    │   ├── transmitter/                 # handheld controller
+    │   │   ├── transmitter.ino
+    │   │   ├── inputs.h
+    │   │   ├── inputs.cpp
+    │   │   ├── display.h
+    │   │   ├── display.cpp
+    │   │   ├── espnow_tx.h
+    │   │   ├── espnow_tx.cpp   
+    │   │   └── packet.h
+    │   │
+    │   └── receiver/                    # onboard, drives the TB6612FNG
+    │       ├── receiver.ino
+    │       ├── outputs.h
+    │       ├── outputs.cpp
+    │       ├── espnow_rx.h
+    │       ├── espnow_rx.cpp
+    │       └── packet.h
+    │
+    └── vision_control/                  # EdgeCV output wired into the same packet contract as motor_control/
+```
+
+> **Heads up:** `packet.h` must be byte-identical in both `transmitter/` and `receiver/` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into the other, or the two boards will silently disagree about what a byte means.
+
+---
+
+## Control Logic
+
+| Input | Effect |
+|---|---|
+| Pot at 0 | Both wheels stopped regardless of steering |
+| Pot at max, encoder centered | Both wheels at full ceiling — straight ahead |
+| Pot at max, encoder turned right | Left wheel ramps down toward 0, right holds ceiling — pivots right |
+| Pot at max, encoder turned left | Right wheel ramps down toward 0, left holds ceiling — pivots left |
+| Encoder button pressed | Toggles armed/disarmed |
+| Disarmed (either side) | STBY dropped on the TB6612FNG — hardware-level stop, not just direction pins at 0 |
 
 ---
 
 ## Pin Connections
 
-| ESP32 GPIO | L298N Pin | Function |
-|------------|-----------|----------|
-| GPIO 27 | IN1 | Left motors – direction A |
-| GPIO 26 | IN2 | Left motors – direction B |
-| GPIO 25 | IN3 | Right motors – direction A |
-| GPIO 33 | IN4 | Right motors – direction B |
-| GND | GND | Common ground |
+**Transmitter**
 
-> ENA and ENB on the L298N are jumpered HIGH (full speed). PWM speed control is planned for V2 to allow smoother autonomous movement.
+| GPIO | Function |
+|---|---|
+| 26 | Speed potentiometer (⚠️ ADC2 — see `devlog.md`) |
+| 13 | Encoder switch (arm/disarm) |
+| 12 | Encoder DT |
+| 14 | Encoder CLK |
+| 5 / 15 / 19 / 4 / 18 | ILI9225: CLK / SDA / RS / RST / CS |
 
----
+**Receiver**
 
-## V2 — Edge AI Design Notes
-
-The core challenge of V2 is fitting real-time computer vision onto a microcontroller with severe hardware constraints:
-
-| Resource | ESP32-CAM |
-|----------|-----------|
-| CPU | Xtensa LX6, 240MHz |
-| SRAM | 520KB (+ 4MB PSRAM on some boards) |
-| Flash | 4MB |
-| Camera | OV2640, up to 1600×1200 (inference will use much lower res) |
-
-**Planned approach:**
-- Use a heavily quantized model (INT8) to reduce memory footprint
-- Run inference at low resolution (e.g. 96×96 or 160×120) to stay within SRAM limits
-- **Obstacle avoidance:** object detection to identify blockers and route around them
-- **Person tracking:** lightweight person detector (exploring MobileNet-based or custom trained TFLite model) to locate a person in frame and steer toward them
-- Frameworks under consideration: TensorFlow Lite for Microcontrollers, ESP-DL
-
-This is an active area of exploration — V2 design decisions will be documented here as they are made.
+| GPIO | Function |
+|---|---|
+| 16 / 17 | Left motor direction (AIN1/AIN2) |
+| 18 / 19 | Right motor direction (BIN1/BIN2) |
+| 21 | TB6612FNG STBY |
+| 26 / 27 | Left/right motor PWM (LEDC) |
 
 ---
 
-## Images / Demo
-
-> 📸 *Bot photo*
-> ![EdgeRover V1](assets/images/car.jpg)
-
-> 🔌 *Wiring diagram*
-> `![Wiring Diagram](assets/diagrams/wiring.png)`
-
-> 🎥 *Demo video (optional)*
-
----
-
-## Challenges Faced (V1)
-
-**Motor mismatch:** Motors didn't run at identical speeds even with the same signal, causing the bot to drift. Fixed by physically testing and pairing motors by speed.
-
-**Wiring at scale:** 4 motors + motor driver + ESP32 = a lot of connections. One loose ground caused random motor cutouts that looked like a firmware bug for hours.
-
-**Learning to solder:** First time soldering motor leads. Cold joints on two motors caused intermittent failures. Had to identify and reflow them.
-
-**Debugging movement:** Figuring out which IN pin controlled which motor required systematically toggling each GPIO and tracing wires physically. Nothing was labeled.
-
-**Power separation:** Powering the ESP32 and motors from the same rail caused the ESP32 to reset under motor load. Fixed by using the L298N's onboard 5V regulator to power the ESP32 separately.
-
----
-
-## What I Learned
-
-| Area | Takeaway |
-|------|----------|
-| Soldering | Joint quality directly affects reliability — cold joints are silent killers |
-| Motor control | H-bridge logic, IN1/IN2 direction combos, power rail isolation |
-| Embedded systems | GPIO control and digital output on ESP32 via Arduino framework |
-| Bluetooth | How Bluepad32 abstracts HID gamepad input at the firmware level |
-| Hardware debugging | Distinguishing software bugs from wiring faults from power issues |
-| Drive systems | Differential drive theory and why it's the right choice for a 4WD robot |
-| Edge AI *(upcoming)* | Model quantization, TFLite for microcontrollers, inference under memory constraints |
-
----
-
-## Project Structure
-
-```
-EdgeRover/
-├── README.md
-├── src/
-│   └── main.ino          # V1 Bluetooth RC firmware
-└── assets/
-    ├── images/
-    │   └── car.jpg
-    └── diagrams/
-        └── wiring.png
-```
-
----
-
-## Getting Started (V1)
+## Getting Started
 
 **Dependencies:**
-- [Arduino IDE](https://www.arduino.cc/en/software) or PlatformIO
-- [Bluepad32 library](https://github.com/ricardoquesada/bluepad32) — install via Arduino Library Manager
+- [Arduino IDE](https://www.arduino.cc/en/software) with ESP32 board support
+- `Adafruit GFX Library` + `Adafruit ILI9225` (Library Manager)
 
 **Steps:**
-1. Install Bluepad32 via Arduino Library Manager
-2. Select your ESP32 board in Arduino IDE
-3. Flash `src/main.ino` to the ESP32
-4. Power on the bot and pair your gamepad
-5. Drive
+1. Flash `src/motor_control/receiver/receiver.ino` to the onboard ESP32, note the MAC address it prints.
+2. Set that MAC in `src/motor_control/transmitter/espnow_tx.cpp` (`RECEIVER_MAC`).
+3. Flash `src/motor_control/transmitter/transmitter.ino` to the handheld ESP32.
+4. Power both up, arm via the encoder button, drive.
+
+---
+
+## Devlog
+
+Every bug, every wrong turn, every fix — from the throttle deadzone that never triggered to the display that turned out to be the wrong chip entirely — is in [`devlog.md`](./devlog.md).
+
+> **Running into a debugging, wiring/connection, or logic issue?** Check [`devlog.md`](./devlog.md) first — it's a running log of mistakes actually made on this project and how each one was root-caused and fixed (pin conflicts, driver mismatches, debounce vs. state-machine issues, etc.). Good chance whatever you're hitting has already been hit and solved here.
 
 ---
 
@@ -214,4 +175,4 @@ MIT — free to use, modify, and build on.
 
 ---
 
-*Building toward autonomous edge robotics, one phase at a time.*
+*Building toward autonomous edge robotics, one phase at a time. EdgeCV proves the model can see — EdgeRover is where it learns to move.*

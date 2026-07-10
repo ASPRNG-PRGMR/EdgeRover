@@ -14,6 +14,11 @@ This isn't just a wiring project — it's the interface the autonomous stack nee
 
 **Next (in progress):** Swap the transmitter for [EdgeCV](https://github.com/) — the onboard ESP32-CAM classifier that's already proven it can run real-time int8 inference on a $10 microcontroller. Same receiver, same packet contract, different brain. **This is the point of the whole build: EdgeRover is where EdgeCV's proof-of-concept stops being a bench demo and starts driving a real machine around a real room.**
 
+<p align="center">
+  <img src="images/car.jpg" alt="EdgeRover chassis" width="45%">
+  <img src="images/controller.jpg" alt="EdgeRover custom transmitter" width="45%">
+</p>
+
 ---
 
 ## Why it's built this way
@@ -117,8 +122,8 @@ EdgeRover/
 |---|---|
 | Pot at 0 | Both wheels stopped regardless of steering |
 | Pot at max, encoder centered | Both wheels at full ceiling — straight ahead |
-| Pot at max, encoder turned right | Left wheel ramps down toward 0, right holds ceiling — pivots right |
-| Pot at max, encoder turned left | Right wheel ramps down toward 0, left holds ceiling — pivots left |
+| Pot at max, encoder turned right | Right wheel ramps down toward 0, left holds ceiling — pivots right |
+| Pot at max, encoder turned left | Left wheel ramps down toward 0, right holds ceiling — pivots left |
 | Encoder button pressed | Toggles armed/disarmed |
 | Disarmed (either side) | STBY dropped on the TB6612FNG — hardware-level stop, not just direction pins at 0 |
 
@@ -166,12 +171,6 @@ EdgeRover/
 Every bug, every wrong turn, every fix — from the throttle deadzone that never triggered to the display that turned out to be the wrong chip entirely — is in [`devlog.md`](./devlog.md).
 
 > **Running into a debugging, wiring/connection, or logic issue?** Check [`devlog.md`](./devlog.md) first — it's a running log of mistakes actually made on this project and how each one was root-caused and fixed (pin conflicts, driver mismatches, debounce vs. state-machine issues, etc.). Good chance whatever you're hitting has already been hit and solved here.
-
----
-
-## License
-
-MIT — free to use, modify, and build on.
 
 ---
 

@@ -1,66 +1,213 @@
 # EdgeRover 🤖
 
-A 4-wheeled robot learning to drive itself — starting with a human on the stick, ending with [EdgeCV](https://github.com/) doing the thinking.
+A 4-wheeled robot learning to drive itself — starting with a human on the stick, ending with the rover following a person around a room on vision alone.
 
-> **Current Status:** ESP-NOW control layer done and flying. Vision integration next.
+> **Current Status:** Pivoting to AprilTag-based visual following. Electrical rework in progress (5A BEC replacing prior capacitor-based brownout mitigation).
 
 ---
 
 ## Overview
 
-EdgeRover is a ground-up hardware + firmware project. The current build: a purpose-built **ESP-NOW link between two ESP32s** — a handheld transmitter with real analog control (potentiometer speed, rotary-encoder steering) talking to a receiver that drives a **TB6612FNG** with actual PWM, not just direction pins.
+EdgeRover is a ground-up hardware + firmware project: a 4WD chassis that started life under manual ESP-NOW control and is now being converted into an autonomous follower. The rover tracks a printed **AprilTag** worn/carried by a person, steers toward it using nothing but the tag's pixel position and apparent size in frame, and stops when it gets close enough — all decision-making running locally on an ESP32-S3-CAM, no host PC, no ROS/micro-ROS, no CNN.
 
-This isn't just a wiring project — it's the interface the autonomous stack needs. The receiver speaks a simple, stable language: *left wheel PWM, right wheel PWM.* That's exactly the shape of output a vision model produces too.
+This is deliberately **not** a CNN/vision-model project for the core following behavior. AprilTag detection is classical computer vision — deterministic, lightweight, and it hands you exactly the two numbers the control loop needs: where the tag is in the frame, and how big it is. No training data, no inference engine required for v1.
 
-**Next (in progress):** Swap the transmitter for [EdgeCV](https://github.com/) — the onboard ESP32-CAM classifier that's already proven it can run real-time int8 inference on a $10 microcontroller. Same receiver, same packet contract, different brain. **This is the point of the whole build: EdgeRover is where EdgeCV's proof-of-concept stops being a bench demo and starts driving a real machine around a real room.**
+---
 
-<p align="center">
-  <img src="images/car.jpg" alt="EdgeRover chassis" width="45%">
-  <img src="images/controller.jpg" alt="EdgeRover custom transmitter" width="45%">
-</p>
+## Why AprilTag, not a learned model
+
+- A CNN-based "follow a hand/shoe" approach was considered and shelved for v1 — multiple hands/shoes in frame create ambiguity a bounding-box detector can't resolve on its own, and it needs a trained model + dataset before it does anything.
+- AprilTag detection gives an unambiguous single target (unique ID, precise corners) with zero training, and the tag's apparent size in frame is enough to estimate distance via the pinhole camera model — no depth sensor, no stereo camera, no CNN.
+- The CNN-based approach (hand/shoe detection via Edge Impulse FOMO + ESP-DL) remains a documented future extension — see [Roadmap](#roadmap).
 
 ---
 
 ## Why it's built this way
 
-- **Speed control** means every start is a controlled ramp, not a full-current lurch — fine for a joystick, a liability for a vision loop making dozens of decisions a second.
-- **ESP-NOW** is a low-latency, connectionless link purpose-fit for a robot that needs to take commands from its own onboard model, not just a human with a gamepad.
-- The packet format is built around left-speed/right-speed, not stick axes — exactly the output a classifier or a nav stack actually wants to emit. The receiver doesn't know or care whether those numbers came from a knob or a model.
+- **Reactive, not planned.** No map, no localization, no path planning — just "where's the tag, how big is it, react." This is the right amount of autonomy for "go where it can and follow," not full navigation.
+- **Fully local.** The entire detect → steer → speed decision loop runs on the ESP32-S3-CAM. No WiFi dependency, no external agent, no host computer in the loop.
+- **Speed control via PWM ceiling + distance-based ramp** means the rover decelerates smoothly as it closes in on the target instead of lurching to a stop.
+- **Differential (tank) drive** — two independently driven sides, pivot turns, no steering servo — keeps the mechanical side simple so all the interesting work happens in the vision/control math.
+
+---
+
+## Electrical Architecture
+
+### Current build
+
+| Component | Spec |
+|---|---|
+| Battery | 12V pack |
+| BEC | 5A-rated, regulated output |
+| Camera | ESP32-S3-CAM (PSRAM) |
+| Drive motors | 4× DC gear motors (4WD) |
+| Motor driver | TB6612FNG (or equivalent H-bridge rated for 4-motor draw) |
+
+```
+12V Battery ──> BEC (5A) ──┬──> ESP32-S3-CAM (logic/camera rail)
+                            └──> Motor driver logic + motor power rail ──> 4× DC motors
+```
+
+The 5A BEC is sized to carry **both** the camera board and all 4 drive motors off a single regulated rail — camera + WiFi/vision workload is a small, steady draw, but the 4 DC motors are the real current budget, especially at stall (motor startup, pivot turns, or driving into resistance). 5A gives headroom above typical stall current for small hobby DC gear motors, but **confirm your specific motors' stall current × 4 against the BEC's continuous rating** before assuming margin — worst case is all 4 motors stalling simultaneously (e.g., rover jammed against an obstacle).
+
+### Prior attempt & why it changed
+
+- **Original power setup:** 4-cell (4S) battery pack feeding the system directly, with bulk capacitors (tried both **2200µF** and **470µF**) across the supply rail as brownout mitigation.
+- **Issue:** Motor current draw (especially at startup/stall) was causing voltage sag severe enough to be a real electrical problem — capacitors alone were a band-aid, not a fix, since a capacitor smooths transients but doesn't address a supply that can't source enough sustained current in the first place.
+- **Fix:** Replacing the direct-battery + capacitor approach with a **regulated 5A BEC** — this addresses the root cause (insufficient/unregulated current delivery to the logic rail under motor load) rather than just buffering it. Capacitor(s) can still be retained on the BEC's output as supplementary smoothing (good practice regardless), but they are no longer the primary defense against brownout.
+
+### Wiring checklist (carried over from original design, still applies)
+
+- Common ground between battery, BEC output, ESP32-S3-CAM, and motor driver is mandatory.
+- Fuse or polyfuse between battery and BEC input.
+- Bulk capacitor (e.g., 1000µF+) across the BEC output near the ESP32-S3-CAM, even with a proper BEC — cheap insurance against residual switching noise from the motor driver.
+- If the ESP32-S3-CAM still resets or the camera glitches when motors start/stop after this change, that points to remaining current-delivery or noise issues on the BEC output — not a code problem.
+
+---
+
+## Software Stack
+
+| Layer | Tool |
+|---|---|
+| Framework | ESP-IDF (preferred over Arduino here — more control over camera driver + easier integration of a C detection library) |
+| Camera driver | `esp32-camera` (Espressif official component) |
+| AprilTag detection | Port of the UMich `apriltag` C library (or lighter ArUco-style detector if frame rate demands it) |
+| Motor control | ESP32 LEDC peripheral, PWM |
+
+---
+
+## Control Loop
+
+```
+loop (target ~15–30 fps, camera-limited):
+    frame = capture_frame()
+    detections = apriltag_detect(frame)
+
+    if len(detections) > 0:
+        tag = pick_best(detections)      # e.g., largest / highest confidence
+        cx, cy = tag.center
+        size_px = tag.apparent_size
+
+        steer_error = compute_steer_error(cx, frame_width)
+        distance_est = estimate_distance(size_px)
+
+        if distance_est <= STOP_DISTANCE:
+            motors.stop()
+        else:
+            speed = compute_speed(distance_est)
+            turn  = compute_turn(steer_error)
+            motors.drive(speed, turn)
+    else:
+        motors.stop()   # v1 default; frame-exit-direction logic is a planned upgrade
+```
+
+---
+
+## Math Reference
+
+### Steering error
+
+```
+frame_center_x = W / 2
+error_x = cx - frame_center_x
+error_x_norm = error_x / (W / 2)        # -1.0 (full left) to +1.0 (full right)
+```
+
+`error_x > 0` → tag right of center → steer right. `|error_x| < deadzone` → go straight (start deadzone ≈ 5% of frame width to kill jitter).
+
+### Turn command (proportional, optionally PD)
+
+```
+turn = Kp * error_x_norm
+turn = Kp * error_x_norm + Kd * (error_x_norm - prev_error_x_norm) / dt   # if oscillation appears
+```
+
+Tune `Kp` empirically, starting ~0.3–0.5.
+
+### Distance from apparent tag size (pinhole camera model)
+
+```
+distance = (real_tag_size × focal_length_px) / apparent_tag_size_px
+```
+
+- `real_tag_size` — physical side length of the printed tag (fixed, measured once)
+- `focal_length_px` — camera focal length in pixels (calibrate below)
+- `apparent_tag_size_px` — measured tag side length in the current frame
+
+**Calibration (one-time):** place tag at known distance `D_known`, measure `apparent_tag_size_px`, then:
+
+```
+focal_length_px = (apparent_tag_size_px × D_known) / real_tag_size
+```
+
+### Speed mapping (smooth deceleration on approach)
+
+```
+if distance <= STOP_DISTANCE:      speed = 0
+elif distance <= SLOW_DISTANCE:    speed = map(distance, STOP_DISTANCE, SLOW_DISTANCE, MIN_SPEED, MAX_SPEED)
+else:                              speed = MAX_SPEED
+
+map(x, in_min, in_max, out_min, out_max) =
+    (x - in_min) × (out_max - out_min) / (in_max - in_min) + out_min
+```
+
+### "Target has stopped" detection
+
+```
+size_history = [last N frames of apparent_tag_size_px]     # e.g., N = 10 @ 20fps
+variance = statistical_variance(size_history)
+
+if variance < STILL_THRESHOLD and distance > STOP_DISTANCE:
+    motors.stop()   # target present but not moving — hold
+```
+
+### PWM duty (ESP32 LEDC) + differential drive mixing
+
+```
+duty_value = speed_fraction × (2^resolution_bits - 1)
+
+left_speed  = clamp(speed - turn, MIN_PWM, MAX_PWM)
+right_speed = clamp(speed + turn, MIN_PWM, MAX_PWM)
+```
+
+(Verify sign convention empirically against your wiring, then keep it consistent.)
+
+---
+
+## Constants Checklist (before first test)
+
+- [ ] `real_tag_size` — measured, cm
+- [ ] `focal_length_px` — calibrated per above
+- [ ] `STOP_DISTANCE`, `SLOW_DISTANCE`
+- [ ] `Kp` (and `Kd` if needed) — tune wheels-off-ground first
+- [ ] `deadzone` — start ~5% of frame width
+- [ ] `STILL_THRESHOLD`
+- [ ] `MIN_SPEED` / `MAX_SPEED` — respect motor driver + BEC current limits
 
 ---
 
 ## Roadmap
 
-### ✅ ESP-NOW Control Link (Complete)
-- Dedicated transmitter ↔ receiver pair over ESP-NOW (no phone, no BT stack)
-- Potentiometer sets a shared PWM speed ceiling (0–255) — softer starts, no more current-spike lurch
-- Rotary encoder provides differential steering: turning only slows the *inner* wheel, outer wheel holds the ceiling
-- Encoder's built-in pushbutton doubles as arm/disarm (debounced press-to-toggle)
-- ILI9225 status screen: armed state, speed %, steering %, raw L/R PWM
-- TB6612FNG driven with real LEDC PWM (20 kHz / 8-bit), replacing tied-HIGH direction-only control
-- `ControlPacket` designed around `leftPWM`/`rightPWM` — receiver doesn't know or care where the numbers came from
+### ✅ ESP-NOW Manual Control (Complete, superseded)
+- Original handheld transmitter ↔ receiver ESP-NOW link with pot-based speed ceiling and rotary-encoder steering — proved out PWM motor control and packet-based control architecture. No longer the primary control path, but the wiring/PWM groundwork carries forward.
 
-### 🔧 Autonomous Handoff (In Progress)
-- Port EdgeCV's onboard classifier output into the same `leftPWM`/`rightPWM` packet contract
-- Obstacle avoidance and person-tracking behaviors driving the rover directly, no transmitter in the loop
-- Manual override retained (arm/disarm + a mode bit already exist in the packet for exactly this)
+### 🔧 AprilTag Visual Following (In Progress)
+- Electrical rework: 4S + capacitor setup → 5A BEC (see [Electrical Architecture](#electrical-architecture))
+- AprilTag C library integration on ESP32-S3-CAM
+- Steering + distance control loop (this README's [Control Loop](#control-loop))
+- Bench testing wheels-off-ground before first drive test
+
+### 🔭 Future Extensions
+- Frame-exit reactive behavior: rover reacts differently depending on whether the tag exits frame left, right, or top (and whether it was shrinking or growing before it vanished) — disambiguates "target walked away" vs. "target got too close."
+- Hand/shoe-based following via a small trained model (Edge Impulse FOMO, deployed via ESP-DL) as an alternative to the AprilTag, once marker-following is solid.
+- Second onboard camera for rear-facing detection.
+- micro-ROS bridge — only if telemetry visualization on a PC or integration with a broader ROS-based system becomes a goal. Not required for the core following behavior.
 
 ---
 
 ## Drive Architecture
 
-Differential (tank) drive — two independently driven sides, pivot turns, no steering servo. What matters is how each side's speed gets decided:
-
-```
-Transmitter                          Receiver
-------------                         --------
-pot        -> speed ceiling (0-255)
-encoder    -> steering offset   \
-                                  +-> leftPWM, rightPWM  --[ESP-NOW]-->  ledcWrite(PWMA/B)
-encoder SW -> armed latch       /                                       TB6612FNG -> motors
-```
-
-The steering math: outer wheel always gets the full ceiling; inner wheel gets `ceiling × (1 − |steps| / max_steps)`, floor at 0 for a full-lock pivot. Simple, predictable, and just arithmetic on two numbers — it doesn't care where they came from.
+Differential (tank) drive — two independently driven sides, pivot turns, no steering servo. The steering math (§ [Math Reference](#math-reference)) computes `left_speed`/`right_speed` directly from the tag's position and size; the receiver-side logic doesn't need to know or care that the numbers now come from vision instead of a rotary encoder.
 
 ---
 
@@ -68,110 +215,38 @@ The steering math: outer wheel always gets the full ceiling; inner wheel gets `c
 
 | Component | Details |
 |---|---|
-| Link | ESP-NOW, dual ESP32 |
-| Motor driver | TB6612FNG |
-| Speed control | PWM, 0–255, pot-limited ceiling |
-| Steering input | Rotary encoder (detented) |
-| Arm/disarm | Encoder pushbutton, debounced toggle |
-| Status feedback | ILI9225 SPI TFT |
+| Camera / compute | ESP32-S3-CAM (PSRAM) |
+| Target marker | Printed AprilTag, fixed known size |
+| Motor driver | TB6612FNG (or higher-current equivalent — confirm against 4-motor draw) |
+| Drive motors | 4× DC gear motors (4WD) |
+| Power | 12V battery pack + 5A BEC |
 | Chassis | 4WD kit |
-| Power | 6V NiMH (4s) |
-
----
-
-## Repository Structure
-
-```
-EdgeRover/
-├── README.md
-├── devlog.md
-└── images/
-│   ├── car.jpg
-│   └── controller.jpg
-│
-└── src/
-    ├── motor_control/ 
-    │   ├── transmitter/                 # handheld controller
-    │   │   ├── transmitter.ino
-    │   │   ├── inputs.h
-    │   │   ├── inputs.cpp
-    │   │   ├── display.h
-    │   │   ├── display.cpp
-    │   │   ├── espnow_tx.h
-    │   │   ├── espnow_tx.cpp   
-    │   │   └── packet.h
-    │   │
-    │   └── receiver/                    # onboard, drives the TB6612FNG
-    │       ├── receiver.ino
-    │       ├── outputs.h
-    │       ├── outputs.cpp
-    │       ├── espnow_rx.h
-    │       ├── espnow_rx.cpp
-    │       └── packet.h
-    │
-    └── vision_control/                  # EdgeCV output wired into the same packet contract as motor_control/
-```
-
-> **Heads up:** `packet.h` must be byte-identical in both `transmitter/` and `receiver/` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into the other, or the two boards will silently disagree about what a byte means.
-
----
-
-## Control Logic
-
-| Input | Effect |
-|---|---|
-| Pot at 0 | Both wheels stopped regardless of steering |
-| Pot at max, encoder centered | Both wheels at full ceiling — straight ahead |
-| Pot at max, encoder turned right | Right wheel ramps down toward 0, left holds ceiling — pivots right |
-| Pot at max, encoder turned left | Left wheel ramps down toward 0, right holds ceiling — pivots left |
-| Encoder button pressed | Toggles armed/disarmed |
-| Disarmed (either side) | STBY dropped on the TB6612FNG — hardware-level stop, not just direction pins at 0 |
-
----
-
-## Pin Connections
-
-**Transmitter**
-
-| GPIO | Function |
-|---|---|
-| 26 | Speed potentiometer (⚠️ ADC2 — see `devlog.md`) |
-| 13 | Encoder switch (arm/disarm) |
-| 12 | Encoder DT |
-| 14 | Encoder CLK |
-| 5 / 15 / 19 / 4 / 18 | ILI9225: CLK / SDA / RS / RST / CS |
-
-**Receiver**
-
-| GPIO | Function |
-|---|---|
-| 16 / 17 | Left motor direction (AIN1/AIN2) |
-| 18 / 19 | Right motor direction (BIN1/BIN2) |
-| 21 | TB6612FNG STBY |
-| 26 / 27 | Left/right motor PWM (LEDC) |
 
 ---
 
 ## Getting Started
 
 **Dependencies:**
-- [Arduino IDE](https://www.arduino.cc/en/software) with ESP32 board support
-- `Adafruit GFX Library` + `Adafruit ILI9225` (Library Manager)
+- ESP-IDF toolchain (with ESP32-S3 target support)
+- `esp32-camera` component
+- AprilTag detection library (ported/vendored into the project — see `src/`)
 
 **Steps:**
-1. Flash `src/motor_control/receiver/receiver.ino` to the onboard ESP32, note the MAC address it prints.
-2. Set that MAC in `src/motor_control/transmitter/espnow_tx.cpp` (`RECEIVER_MAC`).
-3. Flash `src/motor_control/transmitter/transmitter.ino` to the handheld ESP32.
-4. Power both up, arm via the encoder button, drive.
+1. Verify power rail first: confirm BEC output voltage under load with motors connected but before flashing/running vision code.
+2. Flash the AprilTag detection + control firmware to the ESP32-S3-CAM.
+3. Print your AprilTag at the size defined in your calibration constants.
+4. Calibrate `focal_length_px` (see [Math Reference](#math-reference)) before first drive test.
+5. Bench test wheels-off-ground — confirm computed `turn`/`speed` values behave sensibly as the tag moves.
+6. First drive test with `MAX_SPEED` deliberately capped low, then tune from there.
 
 ---
 
 ## Devlog
 
-Every bug, every wrong turn, every fix — from the throttle deadzone that never triggered to the display that turned out to be the wrong chip entirely — is in [`devlog.md`](./devlog.md).
+Every bug, every wrong turn, every fix — from the original ESP-NOW control link through the electrical rework and into the vision pivot — is in [`devlog.md`](./devlog.md).
 
-> **Running into a debugging, wiring/connection, or logic issue?** Check [`devlog.md`](./devlog.md) first — it's a running log of mistakes actually made on this project and how each one was root-caused and fixed (pin conflicts, driver mismatches, debounce vs. state-machine issues, etc.). Good chance whatever you're hitting has already been hit and solved here.
+> **Running into a debugging, wiring/connection, or logic issue?** Check [`devlog.md`](./devlog.md) first — it's a running log of mistakes actually made on this project and how each was root-caused and fixed (power/brownout issues, pin conflicts, driver mismatches, etc.). Good chance whatever you're hitting has already been hit and solved here.
 
 ---
 
-*Building toward autonomous edge robotics, one phase at a time. EdgeCV proves the model can see — EdgeRover is where it learns to move.*
+*Building toward autonomous edge robotics, one phase at a time. EdgeRover started on a human's stick — now it's learning to follow on its own.*

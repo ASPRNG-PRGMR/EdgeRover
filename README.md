@@ -224,6 +224,43 @@ Differential (tank) drive — two independently driven sides, pivot turns, no st
 
 ---
 
+## Repository Structure
+
+```
+EdgeRover/
+├── README.md
+├── devlog.md
+└── images/
+│   ├── car.jpg
+│   └── controller.jpg
+│
+└── src/
+    └── bot_controller/
+        ├── transmitter/                 # handheld controller (manual mode, superseded by vision)
+        │   ├── transmitter.ino
+        │   ├── inputs.h
+        │   ├── inputs.cpp
+        │   ├── display.h
+        │   ├── display.cpp
+        │   ├── espnow_tx.h
+        │   ├── espnow_tx.cpp
+        │   └── packet.h
+        │
+        └── receiver/                    # onboard, drives the TB6612FNG
+            ├── receiver.ino
+            ├── outputs.h
+            ├── outputs.cpp
+            ├── espnow_rx.h
+            ├── espnow_rx.cpp
+            └── packet.h
+```
+
+> **Heads up:** `packet.h` must be byte-identical between `transmitter/` and `receiver/` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into the other, or the two boards will silently disagree about what a byte means.
+>
+> The AprilTag vision code will live alongside `bot_controller/` (e.g. `src/vision_control/`) once that phase starts, reusing `receiver/` as-is — the receiver only understands `leftPWM`/`rightPWM`, so it doesn't care whether those numbers come from the transmitter or the onboard camera.
+
+---
+
 ## Getting Started
 
 **Dependencies:**

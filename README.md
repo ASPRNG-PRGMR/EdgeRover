@@ -4,6 +4,12 @@ A 4-wheeled robot learning to drive itself — starting with a human on the stic
 
 > **Current Status:** Pivoting to AprilTag-based visual following. Electrical rework in progress (5A BEC replacing prior capacitor-based brownout mitigation).
 
+<p align="center">
+  <img src="images/car.jpg" alt="EdgeRover chassis" width="48%" />
+  <img src="images/controller.jpg" alt="Handheld ESP-NOW controller" width="48%" />
+</p>
+<p align="center"><sub>The rover (left) and the handheld ESP-NOW controller it started life under (right).</sub></p>
+
 ---
 
 ## Overview
@@ -33,35 +39,43 @@ This is deliberately **not** a CNN/vision-model project for the core following b
 
 ## Electrical Architecture
 
-### Current build
+### Current build — isolated dual-battery power
 
 | Component | Spec |
 |---|---|
-| Battery | 12V pack |
-| BEC | 5A-rated, regulated output |
-| Camera | ESP32-S3-CAM (PSRAM) |
+| Motor battery | 12V pack |
+| BEC | 5A-rated, regulated output — feeds TB6612FNG **VCC only** |
+| ESP battery | 6V pack (4× AA NiMH) — separate, dedicated to the ESP32 |
+| Camera | ESP32-S3-CAM / ESP32 DevKit V1 (onboard AMS1117-3.3, VIN accepts ~4.5–12V) |
 | Drive motors | 4× DC gear motors (4WD) |
 | Motor driver | TB6612FNG (or equivalent H-bridge rated for 4-motor draw) |
 
-```
-12V Battery ──> BEC (5A) ──┬──> ESP32-S3-CAM (logic/camera rail)
-                            └──> Motor driver logic + motor power rail ──> 4× DC motors
-```
+![Isolated dual-battery power wiring diagram](images/rover_power_wiring.svg)
 
-The 5A BEC is sized to carry **both** the camera board and all 4 drive motors off a single regulated rail — camera + WiFi/vision workload is a small, steady draw, but the 4 DC motors are the real current budget, especially at stall (motor startup, pivot turns, or driving into resistance). 5A gives headroom above typical stall current for small hobby DC gear motors, but **confirm your specific motors' stall current × 4 against the BEC's continuous rating** before assuming margin — worst case is all 4 motors stalling simultaneously (e.g., rover jammed against an obstacle).
+Two fully separate battery packs, two fully separate power domains — **no wire carries both motor current and ESP logic current at any point.** The only connection between the two domains is:
+1. A common ground (mandatory — without it, the PWM/direction signal lines have no shared reference and will read as garbage on the driver side).
+2. The PWM/direction signal wires themselves (low current, signal only, from the ESP32 to the TB6612FNG's logic-level input pins).
 
-### Prior attempt & why it changed
+This means a motor stall or start/stop current spike physically cannot reach the ESP32's supply rail anymore — it has no electrical path to get there.
 
-- **Original power setup:** 4-cell (4S) battery pack feeding the system directly, with bulk capacitors (tried both **2200µF** and **470µF**) across the supply rail as brownout mitigation.
-- **Issue:** Motor current draw (especially at startup/stall) was causing voltage sag severe enough to be a real electrical problem — capacitors alone were a band-aid, not a fix, since a capacitor smooths transients but doesn't address a supply that can't source enough sustained current in the first place.
-- **Fix:** Replacing the direct-battery + capacitor approach with a **regulated 5A BEC** — this addresses the root cause (insufficient/unregulated current delivery to the logic rail under motor load) rather than just buffering it. Capacitor(s) can still be retained on the BEC's output as supplementary smoothing (good practice regardless), but they are no longer the primary defense against brownout.
+**ESP32 side:** confirmed safe — 6V lands on the DevKit V1's `VIN`/`5V` pin (not `3V3` directly), which routes through the board's onboard AMS1117-3.3 linear regulator, comfortably inside its rated 4.5–12V input range.
 
-### Wiring checklist (carried over from original design, still applies)
+**Motor side:** the 5A BEC's job shrunk considerably — it now only powers the TB6612FNG's `VCC` logic pin, not a camera/WiFi board, so its load is smaller and steadier than in the previous shared-rail design. `VM` (motor power, up to ~15V) still comes straight off the 12V pack.
 
-- Common ground between battery, BEC output, ESP32-S3-CAM, and motor driver is mandatory.
-- Fuse or polyfuse between battery and BEC input.
-- Bulk capacitor (e.g., 1000µF+) across the BEC output near the ESP32-S3-CAM, even with a proper BEC — cheap insurance against residual switching noise from the motor driver.
-- If the ESP32-S3-CAM still resets or the camera glitches when motors start/stop after this change, that points to remaining current-delivery or noise issues on the BEC output — not a code problem.
+### How this evolved
+
+1. **4S battery pack + bulk capacitors (2200µF, then 470µF) directly on the supply rail** — motor current draw at startup/stall caused voltage sag severe enough to reset the ESP32. Capacitors alone were a band-aid: they smooth transients but don't fix a supply that can't source enough sustained current.
+2. **Single regulated 5A BEC feeding both the ESP32-S3-CAM and all 4 motors off one rail** — fixed the root current-delivery problem, but the ESP32 still occasionally reset near full motor power, since it shared a regulator and rail with the motor load.
+3. **Current: fully isolated dual-battery domains** (this section) — removes the shared rail entirely. Motor current and ESP logic current now have physically separate paths back to their own batteries; the domains only meet at a common ground and the low-current signal wires.
+
+### Wiring checklist
+
+- Common ground between the 12V pack, BEC output, TB6612FNG, the 6V pack, and the ESP32 — mandatory, and now doing double duty as the *only* electrical link between the two battery domains.
+- Fuse or polyfuse between the 12V pack and the BEC input.
+- Bulk capacitor (e.g., 1000µF+) across the BEC output near the TB6612FNG's VCC pin — supplementary smoothing, no longer the primary defense against brownout.
+- PWM/direction signal wires from ESP32 to TB6612FNG: keep runs short; consider a small series resistor (e.g. 220Ω) on each if noise coupling shows up between the two battery systems.
+- Confirm the 6V pack lands on the ESP32's `VIN`/`5V` pin, never `3V3` directly (which bypasses the onboard regulator and would overvolt the MCU).
+- If the ESP32 still resets near full motor power after this change, the shared ground connection is the first thing to check — a loose/missing common ground reintroduces exactly this symptom via a floating signal reference, not a power-delivery issue this time.
 
 ---
 
@@ -232,7 +246,8 @@ EdgeRover/
 ├── devlog.md
 ├── images/
 │   ├── car.jpg
-│   └── controller.jpg
+│   ├── controller.jpg
+│   └── rover_power_wiring.svg
 └── src/
     ├── bot_controller/
     │   ├── transmitter/                 # handheld controller (manual mode, superseded by vision)

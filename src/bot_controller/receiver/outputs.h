@@ -4,7 +4,7 @@
 #include "packet.h"
 
 // ---- Pin configuration -----------------------------------------------
-// TB6612FNG direction + standby + PWM pins. STBY is driven from
+// TB6612FNG direction + standby + PWM wvjjpins. STBY is driven from
 // packet.armed: HIGH = driver enabled, LOW = driver fully disabled
 // (hardware-level stop, not just direction/PWM at 0).
 #define PIN_AIN1   16   // Left motor, direction pin 1

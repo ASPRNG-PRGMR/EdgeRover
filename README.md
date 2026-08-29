@@ -193,13 +193,8 @@ right_speed = clamp(speed + turn, MIN_PWM, MAX_PWM)
 
 ### 🔧 AprilTag Visual Following (In Progress)
 - Electrical rework: 4S + capacitor setup → 5A BEC (see [Electrical Architecture](#electrical-architecture))
-<<<<<<< HEAD
-- AprilTag C library integration on ESP32-S3-CAM
-- Steering + distance control loop (this README's [Control Loop](#control-loop))
-=======
 - `vision_control/apriltag_follower/` firmware written: camera capture, AprilTag (tag36h11) detection, steering/distance/still-target control math, forward-only PWM mixing, sends `ControlPacket` to the existing, unmodified `receiver/`
 - Remaining: vendor the AprilTag C library into the build, calibrate `REAL_TAG_SIZE_CM`/`FOCAL_LENGTH_PX`, tune `STEER_KP`/`STOP_DISTANCE_CM`/etc. in `constants.h`
->>>>>>> f3e9da4 ( feat: add AprilTag follower firmware, rework README for vision pivot)
 - Bench testing wheels-off-ground before first drive test
 
 ### 🔭 Future Extensions
@@ -235,89 +230,51 @@ Differential (tank) drive — two independently driven sides, pivot turns, no st
 EdgeRover/
 ├── README.md
 ├── devlog.md
-└── images/
+├── images/
 │   ├── car.jpg
 │   └── controller.jpg
-│
 └── src/
-<<<<<<< HEAD
-    └── bot_controller/
-        ├── transmitter/                 # handheld controller (manual mode, superseded by vision)
-        │   ├── transmitter.ino
-        │   ├── inputs.h
-        │   ├── inputs.cpp
-        │   ├── display.h
-        │   ├── display.cpp
-        │   ├── espnow_tx.h
-        │   ├── espnow_tx.cpp
-        │   └── packet.h
-        │
-        └── receiver/                    # onboard, drives the TB6612FNG
-            ├── receiver.ino
-            ├── outputs.h
-            ├── outputs.cpp
-            ├── espnow_rx.h
-            ├── espnow_rx.cpp
-            └── packet.h
-```
-
-> **Heads up:** `packet.h` must be byte-identical between `transmitter/` and `receiver/` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into the other, or the two boards will silently disagree about what a byte means.
->
-> The AprilTag vision code will live alongside `bot_controller/` (e.g. `src/vision_control/`) once that phase starts, reusing `receiver/` as-is — the receiver only understands `leftPWM`/`rightPWM`, so it doesn't care whether those numbers come from the transmitter or the onboard camera.
-=======
-    ├──  bot_controller/
-    │    ├── transmitter/                 # handheld controller (manual mode, superseded by vision)
-    │    │   ├── transmitter.ino
-    │    │   ├── inputs.h
-    │    │   ├── inputs.cpp
-    │    │   ├── display.h
-    │    │   ├── display.cpp
-    │    │   ├── espnow_tx.h
-    │    │   ├── espnow_tx.cpp
-    │    │   └── packet.h
-    │    │
-    │    └── receiver/                    # onboard, drives the TB6612FNG (unchanged, shared by both control modes)
-    │        ├── receiver.ino
-    │        ├── outputs.h
-    │        ├── outputs.cpp
-    │        ├── espnow_rx.h
-    │        ├── espnow_rx.cpp
-    │        └── packet.h
-    │
+    ├── bot_controller/
+    │   ├── transmitter/                 # handheld controller (manual mode, superseded by vision)
+    │   │   ├── transmitter.ino
+    │   │   ├── inputs.h
+    │   │   ├── inputs.cpp
+    │   │   ├── display.h
+    │   │   ├── display.cpp
+    │   │   ├── espnow_tx.h
+    │   │   ├── espnow_tx.cpp
+    │   │   └── packet.h
+    │   └── receiver/                    # onboard, drives the TB6612FNG (unchanged, shared by both control modes)
+    │       ├── receiver.ino
+    │       ├── outputs.h
+    │       ├── outputs.cpp
+    │       ├── espnow_rx.h
+    │       ├── espnow_rx.cpp
+    │       └── packet.h
     └── vision_control/
         └── apriltag_follower/            # ESP32-S3-CAM: detects tag, drives receiver/ directly
             ├── apriltag_follower.ino     # main loop: capture -> detect -> control -> send
-            ├── camera.h / camera.cpp     # esp32-camera init + grayscale frame capture
-            ├── tag_detector.h / tag_detector.cpp   # AprilTag (tag36h11) detection wrapper
-            ├── tracker_control.h / tracker_control.cpp  # steering/distance/PWM mixing math
+            ├── camera.h                  # esp32-camera init + grayscale frame capture
+            ├── camera.cpp
+            ├── tag_detector.h            # AprilTag (tag36h11) detection wrapper
+            ├── tag_detector.cpp
+            ├── tracker_control.h         # steering/distance/PWM mixing math
+            ├── tracker_control.cpp
             ├── constants.h               # all tunables/calibration constants, uncalibrated by default
             ├── packet.h                  # copied byte-identical from bot_controller/
-            └── espnow_tx.h / espnow_tx.cpp   # copied unchanged from bot_controller/transmitter/
+            ├── espnow_tx.h                # copied unchanged from bot_controller/transmitter/
+            └── espnow_tx.cpp
 ```
 
 > **Heads up:** `packet.h` must be byte-identical across every folder that sends or receives a `ControlPacket` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into all the others, or boards will silently disagree about what a byte means.
 >
 > `vision_control/apriltag_follower/` reuses `bot_controller/receiver/` **as-is, unmodified** — the receiver only understands `leftPWM`/`rightPWM`, so it doesn't care whether those numbers came from the handheld transmitter or the onboard camera. `apriltag_follower/` additionally requires the UMich AprilTag C library vendored in separately (not included in this repo — see `tag_detector.cpp` for integration notes).
->>>>>>> f3e9da4 ( feat: add AprilTag follower firmware, rework README for vision pivot)
 
 ---
 
 ## Getting Started
 
 **Dependencies:**
-<<<<<<< HEAD
-- ESP-IDF toolchain (with ESP32-S3 target support)
-- `esp32-camera` component
-- AprilTag detection library (ported/vendored into the project — see `src/`)
-
-**Steps:**
-1. Verify power rail first: confirm BEC output voltage under load with motors connected but before flashing/running vision code.
-2. Flash the AprilTag detection + control firmware to the ESP32-S3-CAM.
-3. Print your AprilTag at the size defined in your calibration constants.
-4. Calibrate `focal_length_px` (see [Math Reference](#math-reference)) before first drive test.
-5. Bench test wheels-off-ground — confirm computed `turn`/`speed` values behave sensibly as the tag moves.
-6. First drive test with `MAX_SPEED` deliberately capped low, then tune from there.
-=======
 - Arduino IDE (or arduino-cli) with ESP32 board support
 - `esp32-camera` component (Espressif)
 - UMich AprilTag C library, vendored separately — see the top comment in `tag_detector.cpp` for integration notes (not bundled in this repo)
@@ -332,7 +289,6 @@ EdgeRover/
 7. Flash `src/vision_control/apriltag_follower/apriltag_follower.ino` to the ESP32-S3-CAM.
 8. Bench test wheels-off-ground — watch serial output, confirm computed `leftPWM`/`rightPWM` behave sensibly as the tag moves before trusting it near the floor.
 9. First drive test with `MAX_PWM_CEILING` in `constants.h` deliberately capped low, then tune `STEER_KP`/`STOP_DISTANCE_CM`/etc. from there.
->>>>>>> f3e9da4 ( feat: add AprilTag follower firmware, rework README for vision pivot)
 
 ---
 

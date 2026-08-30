@@ -130,22 +130,48 @@ static uint8_t readButtons()
     return buttons;
 }
 
+// Minimum fraction of the speed ceiling the INNER wheel is allowed to
+// drop to while steering. Without this floor, factor -> 0.0 at full
+// steering lock, which means full lock literally zeroes that wheel's
+// PWM - fine for a stationary pivot, but during a moving turn it means
+// steering hard enough (even briefly, e.g. hitting a chicane) can kill
+// drive to one side entirely, right when you need both sides pulling.
+//
+// With the floor, steering always tapers the inner wheel smoothly down
+// to MIN_INNER_FACTOR and stops there - a true zero-speed pivot is no
+// longer reachable just by cranking the encoder while rolling. If you
+// want a dedicated in-place pivot for tight-course maneuvering later,
+// that should be its own explicit input (e.g. a button held alongside
+// full steer), not something reachable from the normal steering range.
+//
+// Tune on the bench: lower = tighter turning radius at full lock,
+// higher = gentler/more predictable at speed. Start around 0.3-0.4 and
+// adjust after driving a few laps.
+#define MIN_INNER_FACTOR 0.35f
+
 // Applies the encoder's steering offset to the pot's speed ceiling.
-// Per the design: the outer wheel always runs at the ceiling - only
-// the inner (turn-direction) wheel gets slowed, down to 0 at full lock.
+// Outer wheel always runs at the ceiling; inner (turn-direction) wheel
+// tapers down with steering angle but is floored at MIN_INNER_FACTOR
+// instead of being allowed to reach 0.
 static void computeDrive(uint8_t speedPWM, int32_t steps, uint8_t &leftPWM, uint8_t &rightPWM)
 {
-    float factor = 1.0f - (float)abs(steps) / (float)STEER_MAX_STEPS;
-    uint8_t reduced = (uint8_t)((float)speedPWM * factor);
+    float turnFactor = (float)abs(steps) / (float)STEER_MAX_STEPS;  // 0.0 (center) .. 1.0 (full lock)
+    float innerFactor = 1.0f - turnFactor;
+    if (innerFactor < MIN_INNER_FACTOR)
+    {
+        innerFactor = MIN_INNER_FACTOR;
+    }
+
+    uint8_t inner = (uint8_t)((float)speedPWM * innerFactor);
 
     if (steps >= 0)   // turning right -> slow the right (inner) wheel
     {
         leftPWM  = speedPWM;
-        rightPWM = reduced;
+        rightPWM = inner;
     }
     else              // turning left -> slow the left (inner) wheel
     {
-        leftPWM  = reduced;
+        leftPWM  = inner;
         rightPWM = speedPWM;
     }
 }

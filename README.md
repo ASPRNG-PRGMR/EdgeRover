@@ -205,6 +205,15 @@ right_speed = clamp(speed + turn, MIN_PWM, MAX_PWM)
 ### ✅ ESP-NOW Manual Control (Complete, superseded)
 - Original handheld transmitter ↔ receiver ESP-NOW link with pot-based speed ceiling and rotary-encoder steering — proved out PWM motor control and packet-based control architecture. No longer the primary control path, but the wiring/PWM groundwork carries forward.
 
+### 🏁 Competition Prep — Tank-Turn Steering (Current Priority)
+Robo race entry: square track, rounded corners — one side has an oil/slip section, one side has a ramp, one side is clean, and the last side ends in a standing-block obstacle course requiring tight maneuvering right as the rover exits the corner. Three laps, best lap counts.
+
+**Current focus: get the existing skid-steer (tank-turn) mixing as precise and reliable as possible.** This is the control scheme that will actually run at competition unless confirmed otherwise.
+
+- Fixed a real issue in `inputs.cpp`'s `computeDrive()`: the inner wheel's steering factor could reach `0.0` at full encoder lock, meaning a hard turn while moving could fully zero one side's drive — not just a tight turn, a dead stop on that wheel. Added `MIN_INNER_FACTOR` (default `0.35`, tunable) so steering always tapers the inner wheel smoothly and never drops below that floor. A true zero-speed pivot is intentionally no longer reachable just by steering hard while rolling.
+- `MIN_INNER_FACTOR` is a starting guess, not calibrated — needs a proper bench test (wheels off the ground) followed by track-condition testing, especially through the obstacle section where turn precision matters most.
+- Considered switching the front axle to a servo-actuated steering knuckle (Ackermann/car-style) for better traction through the oil section, since skid-steering relies on friction to turn and that breaks down on a slippery surface. **Parked for now** — car-style steering has a real minimum turn radius and can't pivot in place, which would hurt badly in the obstacle course (the section that likely matters most for lap time). Possible future direction if competition rules allow a **dual-mode** setup (servo-steered for the oil section, tank-turn for everything else, toggled via the spare pot/encoder/switch already on hand) — but that depends on confirming it's allowed, and isn't the priority until tank-turn itself is solid.
+
 ### 🔧 AprilTag Visual Following (In Progress)
 - Electrical rework: 4S + capacitor setup → 5A BEC (see [Electrical Architecture](#electrical-architecture))
 - `vision_control/apriltag_follower/` firmware written: camera capture, AprilTag (tag36h11) detection, steering/distance/still-target control math, forward-only PWM mixing, sends `ControlPacket` to the existing, unmodified `receiver/`
@@ -222,6 +231,8 @@ right_speed = clamp(speed + turn, MIN_PWM, MAX_PWM)
 ## Drive Architecture
 
 Differential (tank) drive — two independently driven sides, pivot turns, no steering servo. The steering math (§ [Math Reference](#math-reference)) computes `left_speed`/`right_speed` directly from the tag's position and size; the receiver-side logic doesn't need to know or care that the numbers now come from vision instead of a rotary encoder.
+
+> **Conditional idea, not built:** a servo-actuated front axle for car-style (Ackermann) steering, toggled against tank drive via a mode switch, was considered for the competition's oil/slip section specifically. Not pursued unless confirmed allowed by competition rules — see [Competition Prep](#-competition-prep--tank-turn-steering-current-priority) in the Roadmap.
 
 ---
 

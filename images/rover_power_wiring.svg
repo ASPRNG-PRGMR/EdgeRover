@@ -1,1 +1,146 @@
-<svg width="100%" viewBox="0 0 1100 760" role="img" xmlns="http://www.w3.org/2000/svg"><title>EdgeRover power wiring diagram</title><desc>Simplified power wiring reference: 12V pack through a fuse splits to a 5A BEC (feeding TB6612FNG VCC) and directly to VM; TB6612FNG drives left and right motor pairs. A separate 6V NiMH pack feeds the ESP32 VIN pin through its onboard regulator. The two domains share only a common ground and PWM/direction signal wires.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs><rect x="0" y="0" width="1100" height="760" fill="black"/><text x="550.0" y="28" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="rgb(240,239,235)">EdgeRover Power Wiring</text><text x="550.0" y="52" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="400" fill="rgb(190,188,182)">isolated dual-battery domains — linked only by common ground + signal wires</text><rect x="60" y="78" width="260" height="52" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="190" y="104" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="rgb(30,30,28)">12V battery pack</text><rect x="780" y="78" width="260" height="52" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="910" y="104" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="rgb(30,30,28)">6V pack (4×AA NiMH)</text><path d="M190,130 L190,164" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M910,130 L910,164" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="148" width="400" height="480" rx="18" fill="rgb(250,236,231)" stroke="rgb(153,60,29)" stroke-width="1.3"/><text x="220" y="172" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="rgb(113,43,19)">MOTOR DOMAIN</text><rect x="680" y="148" width="400" height="480" rx="18" fill="rgb(227,238,250)" stroke="rgb(30,84,153)" stroke-width="1.3"/><text x="880" y="172" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="rgb(20,60,110)">ESP DOMAIN</text><rect x="60" y="196" width="320" height="46" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="220" y="219" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="rgb(30,30,28)">Fuse / polyfuse</text><path d="M190,242 L190,256" stroke="rgb(155,153,147)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="190" cy="256" r="3" fill="rgb(155,153,147)"/><path d="M190,256 L130,256 L130,270" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M190,256 L300,256 L300,270" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="65" y="270" width="130" height="52" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="130" y="296" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="rgb(30,30,28)">BEC 5A</text><text x="130" y="313" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11.5" font-weight="400" fill="rgb(100,98,94)">12V→5V</text><line x1="119" y1="342" x2="141" y2="342" stroke="rgb(153,60,29)" stroke-width="2.2"/><line x1="119" y1="358" x2="141" y2="358" stroke="rgb(153,60,29)" stroke-width="2.2"/><line x1="130" y1="326" x2="130" y2="342" stroke="rgb(155,153,147)" stroke-width="2"/><line x1="130" y1="358" x2="130" y2="374" stroke="rgb(155,153,147)" stroke-width="2"/><rect x="139.1" y="341.5" width="77.8" height="17.0" rx="3" fill="white" opacity="0.95"/><text x="178" y="350" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="500" fill="rgb(100,98,94)">1000µF cap</text><path d="M130,362 L130,376" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M300,270 L300,376" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="291.5" y="291.5" width="96.9" height="17.0" rx="3" fill="white" opacity="0.95"/><text x="340" y="300" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="500" fill="rgb(100,98,94)">VM 12V direct</text><rect x="50" y="376" width="340" height="100" rx="12" fill="rgb(241,239,232)" stroke="rgb(153,60,29)" stroke-width="1.3"/><text x="220" y="400" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="rgb(113,43,19)">TB6612FNG motor driver</text><text x="130" y="424" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">VCC ← 5V (BEC)</text><text x="300" y="424" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">VM ← 12V direct</text><text x="220" y="450" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(100,98,94)">GND — common with ESP domain</text><path d="M130,476 L130,494" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M310,476 L310,494" stroke="rgb(155,153,147)" stroke-width="2" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="113.0" y="477.8" width="34.0" height="16.5" rx="3" fill="white" opacity="0.95"/><text x="130" y="486" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5" font-weight="500" fill="rgb(100,98,94)">A</text><rect x="293.0" y="477.8" width="34.0" height="16.5" rx="3" fill="white" opacity="0.95"/><text x="310" y="486" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5" font-weight="500" fill="rgb(100,98,94)">B</text><rect x="50" y="494" width="160" height="66" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="130" y="514" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="rgb(30,30,28)">Left motors ×2</text><text x="130" y="536" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="rgb(100,98,94)">(front + rear)</text><rect x="230" y="494" width="160" height="66" rx="10" fill="rgb(241,239,232)" stroke="rgb(95,94,90)" stroke-width="1.3"/><text x="310" y="514" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="rgb(30,30,28)">Right motors ×2</text><text x="310" y="536" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="rgb(100,98,94)">(front + rear)</text><text x="220" y="594" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12.5" font-weight="500" fill="rgb(113,43,19)">4× DC gear motors — 4WD tank drive</text><rect x="720" y="196" width="320" height="110" rx="12" fill="rgb(241,239,232)" stroke="rgb(30,84,153)" stroke-width="1.3"/><text x="880" y="222" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="rgb(20,60,110)">ESP32-S3-CAM / DevKit V1</text><text x="880" y="250" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12.5" font-weight="400" fill="rgb(55,55,52)">6V → VIN / 5V pin (not 3V3)</text><text x="880" y="272" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12.5" font-weight="400" fill="rgb(100,98,94)">onboard AMS1117-3.3 → 3.3V rail</text><text x="880" y="292" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11.5" font-weight="400" fill="rgb(100,98,94)">input range 4.5–12V ✓</text><rect x="415" y="340" width="270" height="78" rx="10" fill="white" stroke="rgb(155,153,147)" stroke-width="1.3" stroke-dasharray="5 4"/><text x="550" y="362" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="rgb(30,30,28)">PWM / DIRECTION</text><text x="550" y="384" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="rgb(100,98,94)">PWMA·AIN1·AIN2·PWMB·BIN1·BIN2</text><text x="550" y="402" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="rgb(100,98,94)">signal only, low current</text><path d="M390,400 L415,380" stroke="rgb(155,153,147)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M685,380 L715,300" stroke="rgb(155,153,147)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="720" y="340" width="320" height="168" rx="12" fill="rgb(241,239,232)" stroke="rgb(30,84,153)" stroke-width="1"/><text x="880" y="364" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="rgb(20,60,110)">Wiring checklist</text><circle cx="748" cy="394" r="3" fill="rgb(30,84,153)"/><text x="762" y="394" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">VIN gets the 6V pack — never 3V3 directly</text><circle cx="748" cy="424" r="3" fill="rgb(30,84,153)"/><text x="762" y="424" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">GND shared with the motor domain (below)</text><circle cx="748" cy="454" r="3" fill="rgb(30,84,153)"/><text x="762" y="454" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">Separate pack — no shared rail with motors</text><circle cx="748" cy="484" r="3" fill="rgb(30,84,153)"/><text x="762" y="484" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(55,55,52)">PWM/direction lines run to TB6612FNG only</text><path d="M190,628 L190,656" stroke="rgb(195,193,187)" stroke-width="2" stroke-dasharray="3 3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M220,628 L220,656" stroke="rgb(195,193,187)" stroke-width="2" stroke-dasharray="3 3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M880,508 L880,656" stroke="rgb(195,193,187)" stroke-width="2" stroke-dasharray="3 3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="180" y1="628" x2="200" y2="628" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="183.5" y1="633" x2="196.5" y2="633" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="187" y1="638" x2="193" y2="638" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="210" y1="628" x2="230" y2="628" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="213.5" y1="633" x2="226.5" y2="633" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="217" y1="638" x2="223" y2="638" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="870" y1="508" x2="890" y2="508" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="873.5" y1="513" x2="886.5" y2="513" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="877" y1="518" x2="883" y2="518" stroke="rgb(195,193,187)" stroke-width="2"/><line x1="60" y1="656" x2="1040" y2="656" stroke="rgb(195,193,187)" stroke-width="2.4"/><text x="550" y="680" text-anchor="middle" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="rgb(190,188,182)">COMMON GROUND — the only other link between the two domains</text><line x1="60" y1="698" x2="1040" y2="698" stroke="rgb(55,55,53)" stroke-width="1"/><path d="M60,720 L82,720" stroke="rgb(155,153,147)" stroke-width="2.6" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="90" y="720" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(190,188,182)">power</text><path d="M220,720 L242,720" stroke="rgb(155,153,147)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="250" y="720" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(190,188,182)">signal</text><path d="M380,720 L402,720" stroke="rgb(195,193,187)" stroke-width="1.8" stroke-dasharray="3 3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="410" y="720" text-anchor="start" dominant-baseline="central" font-family="anthropic-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="400" fill="rgb(190,188,182)">ground</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif">
+<title>EdgeRover power wiring diagram</title>
+<desc>Isolated dual-battery power wiring: a 12V pack passes through a fuse and splits to a 5A BEC (feeding TB6612FNG VCC) and directly to VM; the TB6612FNG drives left and right motor pairs via ESP32 GPIO16-19, 21, 26-27. A separate 6V NiMH pack feeds the ESP32 VIN pin. The two domains share only a common ground and seven signal wires.</desc>
+
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<!-- ===================== BACKGROUND ===================== -->
+<rect x="0" y="0" width="1600" height="1600" fill="#000000"/>
+
+<!-- ===================== TITLE ===================== -->
+<text x="800" y="52" text-anchor="middle" font-size="32" font-weight="800" fill="#f5f5f5">EdgeRover — Isolated Dual-Battery Power &amp; Signal Wiring</text>
+<text x="800" y="88" text-anchor="middle" font-size="18" fill="#9a9a9a">Motor domain (12V pack + BEC) is fully isolated from the ESP domain (6V pack) —</text>
+<text x="800" y="112" text-anchor="middle" font-size="18" fill="#9a9a9a">linked only by a common ground and low-current control signals.</text>
+
+<!-- ===================== 12V BATTERY PACK ===================== -->
+<rect x="60" y="150" width="420" height="120" rx="14" fill="#2a1210" stroke="#ff5c4d" stroke-width="2"/>
+<text x="270" y="196" text-anchor="middle" font-size="23" font-weight="700" fill="#ff8a75">12V Battery Pack</text>
+<text x="270" y="228" text-anchor="middle" font-size="18" fill="#e0b3ab">Motor domain source</text>
+
+<!-- ===================== WIRE COLOR LEGEND ===================== -->
+<rect x="550" y="150" width="525" height="345" rx="14" fill="#141414" stroke="#666666" stroke-width="2"/>
+<text x="812" y="188" text-anchor="middle" font-size="22" font-weight="700" fill="#f0f0f0">Wire Color Legend</text>
+
+<rect x="577" y="207" width="26" height="18" fill="#ff5c4d"/>
+<text x="617" y="221" font-size="18" fill="#dddddd">Red — 12V direct (motor power)</text>
+
+<rect x="577" y="249" width="26" height="18" fill="#ffb347"/>
+<text x="617" y="263" font-size="18" fill="#dddddd">Orange — BEC 5V (logic power)</text>
+
+<rect x="577" y="291" width="26" height="18" fill="#c792ea"/>
+<text x="617" y="305" font-size="18" fill="#dddddd">Purple — 6V ESP supply (VIN)</text>
+
+<rect x="577" y="333" width="26" height="18" fill="#4fc3f7"/>
+<text x="617" y="347" font-size="18" fill="#dddddd">Blue — control signals (GPIO)</text>
+
+<rect x="577" y="375" width="26" height="18" fill="#66bb6a"/>
+<text x="617" y="389" font-size="18" fill="#dddddd">Green — motor drive output</text>
+
+<line x1="577" y1="426" x2="603" y2="426" stroke="#cccccc" stroke-width="2.5" stroke-dasharray="6 4"/>
+<text x="617" y="431" font-size="18" fill="#dddddd">Gray dashed — ground bus</text>
+
+<text x="812" y="468" text-anchor="middle" font-size="18" fill="#888888" font-style="italic">All wires share a common ground — see bottom bus.</text>
+
+<!-- ===================== 6V PACK ===================== -->
+<rect x="1120" y="150" width="420" height="120" rx="14" fill="#161327" stroke="#c792ea" stroke-width="2"/>
+<text x="1330" y="196" text-anchor="middle" font-size="23" font-weight="700" fill="#d9b3f0">6V Pack (4× AA NiMH)</text>
+<text x="1330" y="228" text-anchor="middle" font-size="18" fill="#b39ddb">ESP domain source</text>
+
+<!-- battery1 junction and branches -->
+<line x1="270" y1="270" x2="270" y2="300" stroke="#ff5c4d" stroke-width="3"/>
+<circle cx="270" cy="300" r="5" fill="#ff5c4d"/>
+<line x1="270" y1="300" x2="270" y2="330" stroke="#ff5c4d" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M270,300 L505,300 L505,850" fill="none" stroke="#ff5c4d" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="520" y="580" font-size="18" fill="#ff8a75" transform="rotate(90 520 580)">12V direct → VM</text>
+
+<!-- ===================== FUSE ===================== -->
+<rect x="60" y="330" width="420" height="100" rx="12" fill="#241f10" stroke="#ffb347" stroke-width="2"/>
+<text x="270" y="388" text-anchor="middle" font-size="22" font-weight="700" fill="#ffd699">Fuse / PTC</text>
+
+<line x1="270" y1="430" x2="270" y2="460" stroke="#ffb347" stroke-width="3" marker-end="url(#arrow)"/>
+
+<!-- ===================== BEC ===================== -->
+<rect x="60" y="460" width="420" height="150" rx="14" fill="#241f10" stroke="#ffb347" stroke-width="2"/>
+<text x="270" y="502" text-anchor="middle" font-size="23" font-weight="700" fill="#ffcc80">BEC 5A</text>
+<text x="270" y="534" text-anchor="middle" font-size="18" fill="#e0c19a">12V → 5V Regulated</text>
+<text x="270" y="562" text-anchor="middle" font-size="18" fill="#c9a876">Feeds TB6612FNG VCC only</text>
+
+<!-- capacitor -->
+<line x1="270" y1="610" x2="270" y2="630" stroke="#ffb347" stroke-width="3"/>
+<line x1="250" y1="636" x2="290" y2="636" stroke="#ffb347" stroke-width="4"/>
+<line x1="250" y1="652" x2="290" y2="652" stroke="#ffb347" stroke-width="4"/>
+<text x="300" y="649" font-size="18" fill="#e0c19a">1000µF+ buffer cap</text>
+<path d="M270,652 L270,690 L650,690 L650,850" fill="none" stroke="#ffb347" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="665" y="770" font-size="18" fill="#ffcc80" transform="rotate(90 665 770)">BEC 5V → VCC</text>
+
+<!-- ===================== 6V PACK → ESP32 ===================== -->
+<line x1="1330" y1="270" x2="1330" y2="340" stroke="#c792ea" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="1345" y="308" font-size="18" fill="#d9b3f0">→ VIN pin</text>
+
+<!-- ===================== ESP32 DEVKIT V1 ===================== -->
+<rect x="1120" y="340" width="420" height="430" rx="14" fill="#161327" stroke="#c792ea" stroke-width="2"/>
+<text x="1330" y="382" text-anchor="middle" font-size="23" font-weight="700" fill="#e6d0f7">ESP32 DevKit V1</text>
+
+<text x="1145" y="424" font-size="18" fill="#d9b3f0">VIN ← 6V pack (4× AA NiMH)</text>
+<text x="1145" y="460" font-size="18" fill="#bbbbbb">GND → common ground bus</text>
+<text x="1145" y="496" font-size="18" fill="#90caf9">GPIO16 → AIN1 (Left dir A)</text>
+<text x="1145" y="532" font-size="18" fill="#90caf9">GPIO17 → AIN2 (Left dir B)</text>
+<text x="1145" y="568" font-size="18" fill="#90caf9">GPIO18 → BIN1 (Right dir A)</text>
+<text x="1145" y="604" font-size="18" fill="#90caf9">GPIO19 → BIN2 (Right dir B)</text>
+<text x="1145" y="640" font-size="18" fill="#90caf9">GPIO21 → STBY (enable)</text>
+<text x="1145" y="676" font-size="18" fill="#90caf9">GPIO26 → PWMA (Left, LEDC)</text>
+<text x="1145" y="712" font-size="18" fill="#90caf9">GPIO27 → PWMB (Right, LEDC)</text>
+<text x="1330" y="748" text-anchor="middle" font-size="18" fill="#999999" font-style="italic">AMS1117-3.3 onboard · VIN 4.5–12V</text>
+
+<!-- signal bundle -->
+<path d="M1330,770 L1330,850" fill="none" stroke="#4fc3f7" stroke-width="3.5" marker-end="url(#arrow)"/>
+<text x="1305" y="795" text-anchor="end" font-size="18" fill="#4fc3f7">Control signals — 7 wires</text>
+<text x="1305" y="819" text-anchor="end" font-size="18" fill="#4fc3f7">(GPIO16, 17, 18, 19, 21, 26, 27)</text>
+
+<!-- ===================== TB6612FNG ===================== -->
+<rect x="60" y="850" width="1480" height="290" rx="16" fill="#0f1a0f" stroke="#66bb6a" stroke-width="2.5"/>
+<text x="800" y="894" text-anchor="middle" font-size="25" font-weight="800" fill="#a5d6a7">TB6612FNG Motor Driver</text>
+
+<text x="420" y="936" text-anchor="middle" font-size="18" fill="#ff8a75">VM ← 12V direct (motor power)</text>
+<text x="420" y="974" text-anchor="middle" font-size="18" fill="#ffcc80">VCC ← BEC 5V regulated (logic)</text>
+<text x="420" y="1012" text-anchor="middle" font-size="18" fill="#bbbbbb">GND → common ground bus</text>
+<text x="420" y="1050" text-anchor="middle" font-size="18" fill="#90caf9">STBY ← GPIO21</text>
+<text x="420" y="1088" text-anchor="middle" font-size="18" fill="#90caf9">PWMA ← GPIO26 (left speed)</text>
+
+<text x="1180" y="936" text-anchor="middle" font-size="18" fill="#90caf9">AIN1 ← GPIO16   |   AIN2 ← GPIO17</text>
+<text x="1180" y="974" text-anchor="middle" font-size="18" fill="#90caf9">BIN1 ← GPIO18   |   BIN2 ← GPIO19</text>
+<text x="1180" y="1012" text-anchor="middle" font-size="18" fill="#90caf9">PWMB ← GPIO27 (right speed)</text>
+<text x="1180" y="1050" text-anchor="middle" font-size="18" fill="#a5d6a7">AO1/AO2 → Left motors ×2 (parallel)</text>
+<text x="1180" y="1088" text-anchor="middle" font-size="18" fill="#a5d6a7">BO1/BO2 → Right motors ×2 (parallel)</text>
+
+<!-- outputs to motors -->
+<line x1="420" y1="1140" x2="420" y2="1220" stroke="#66bb6a" stroke-width="4" marker-end="url(#arrow)"/>
+<line x1="1180" y1="1140" x2="1180" y2="1220" stroke="#66bb6a" stroke-width="4" marker-end="url(#arrow)"/>
+
+<!-- ===================== MOTORS ===================== -->
+<rect x="200" y="1220" width="440" height="150" rx="14" fill="#0f1f10" stroke="#66bb6a" stroke-width="2"/>
+<text x="420" y="1266" text-anchor="middle" font-size="23" font-weight="700" fill="#a5d6a7">Left Motors ×2</text>
+<text x="420" y="1300" text-anchor="middle" font-size="18" fill="#89b58a">(AO1/AO2, parallel)</text>
+
+<rect x="960" y="1220" width="440" height="150" rx="14" fill="#0f1f10" stroke="#66bb6a" stroke-width="2"/>
+<text x="1180" y="1266" text-anchor="middle" font-size="23" font-weight="700" fill="#a5d6a7">Right Motors ×2</text>
+<text x="1180" y="1300" text-anchor="middle" font-size="18" fill="#89b58a">(BO1/BO2, parallel)</text>
+
+<!-- ===================== COMMON GROUND BUS ===================== -->
+<line x1="40" y1="1450" x2="1560" y2="1450" stroke="#cccccc" stroke-width="3"/>
+
+<path d="M90,270 L40,270 L40,1450" fill="none" stroke="#999999" stroke-width="2" stroke-dasharray="6 5"/>
+<path d="M1500,270 L1560,270 L1560,1450" fill="none" stroke="#999999" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800" y1="1140" x2="800" y2="1450" stroke="#999999" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="420" y1="1370" x2="420" y2="1450" stroke="#999999" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="1180" y1="1370" x2="1180" y2="1450" stroke="#999999" stroke-width="2" stroke-dasharray="6 5"/>
+
+<text x="800" y="1494" text-anchor="middle" font-size="22" font-weight="700" fill="#eeeeee">Common Ground — ties both battery domains together</text>
+<text x="800" y="1524" text-anchor="middle" font-size="18" fill="#aaaaaa">This is the ONLY electrical link between the 12V motor domain and the 6V ESP domain, besides the signal wires above.</text>
+<text x="800" y="1552" text-anchor="middle" font-size="18" fill="#888888" font-style="italic">Tip: this design fuses only the BEC branch — consider a second fuse/polyfuse on the direct 12V→VM path too.</text>
+
+</svg>

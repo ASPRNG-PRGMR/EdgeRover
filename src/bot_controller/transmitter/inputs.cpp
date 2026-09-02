@@ -144,35 +144,61 @@ static uint8_t readButtons()
 // that should be its own explicit input (e.g. a button held alongside
 // full steer), not something reachable from the normal steering range.
 //
-// Tune on the bench: lower = tighter turning radius at full lock,
-// higher = gentler/more predictable at speed. Start around 0.3-0.4 and
-// adjust after driving a few laps.
-#define MIN_INNER_FACTOR 0.35f
 
-// Applies the encoder's steering offset to the pot's speed ceiling.
-// Outer wheel always runs at the ceiling; inner (turn-direction) wheel
-// tapers down with steering angle but is floored at MIN_INNER_FACTOR
-// instead of being allowed to reach 0.
-static void computeDrive(uint8_t speedPWM, int32_t steps, uint8_t &leftPWM, uint8_t &rightPWM)
+// Turning now tapers the inner wheel THROUGH zero and into reverse as
+// steering approaches full lock, instead of flooring at a fixed
+// minimum. At center: inner = outer (straight). At half lock: inner = 0
+// (pivots around that wheel). At full lock: inner = full reverse (true
+// zero-radius turn). This replaces the old MIN_INNER_FACTOR floor.
+//
+// Separately: if the pot is at idle AND the encoder is deflected, that's
+// not "driving with a tiny bit of throttle" - it's a request to pivot in
+// place, using the existing controls with no new hardware. Both wheels
+// spin at equal magnitude, opposite directions, scaled by steer angle.
+
+#define THROTTLE_DEADBAND 8     // pot noise floor - below this counts as "idle"
+#define STEER_DEADBAND    2     // encoder noise floor - below this counts as "centered"
+#define PIVOT_PWM_MAX     180   // cap for in-place pivot speed - tune on the bench
+
+static void computeDrive(uint8_t speedPWM, int32_t steps, int16_t &leftPWM, int16_t &rightPWM)
 {
-    float turnFactor = (float)abs(steps) / (float)STEER_MAX_STEPS;  // 0.0 (center) .. 1.0 (full lock)
-    float innerFactor = 1.0f - turnFactor;
-    if (innerFactor < MIN_INNER_FACTOR)
+    int32_t absSteps = abs(steps);
+    float turnFactor = (float)absSteps / (float)STEER_MAX_STEPS;  // 0.0 (center) .. 1.0 (full lock)
+    if (turnFactor > 1.0f) turnFactor = 1.0f;
+
+    if (speedPWM <= THROTTLE_DEADBAND && absSteps > STEER_DEADBAND)
     {
-        innerFactor = MIN_INNER_FACTOR;
+        // Idle throttle + steering deflected -> pivot in place.
+        int16_t pivotPWM = (int16_t)(PIVOT_PWM_MAX * turnFactor);
+
+        if (steps > 0)   // pivot right (CW)
+        {
+            leftPWM  =  pivotPWM;
+            rightPWM = -pivotPWM;
+        }
+        else              // pivot left (CCW)
+        {
+            leftPWM  = -pivotPWM;
+            rightPWM =  pivotPWM;
+        }
+        return;
     }
 
-    uint8_t inner = (uint8_t)((float)speedPWM * innerFactor);
+    // Normal driving: outer wheel always runs at commanded throttle.
+    // Inner wheel ranges from +1x (centered) through 0 (half lock) to
+    // -1x (full lock) of that same throttle.
+    float innerFactor = 1.0f - 2.0f * turnFactor;
+    int16_t inner = (int16_t)((float)speedPWM * innerFactor);
 
-    if (steps >= 0)   // turning right -> slow the right (inner) wheel
+    if (steps >= 0)   // turning right -> right wheel is inner
     {
-        leftPWM  = speedPWM;
+        leftPWM  = (int16_t)speedPWM;
         rightPWM = inner;
     }
-    else              // turning left -> slow the left (inner) wheel
+    else              // turning left -> left wheel is inner
     {
         leftPWM  = inner;
-        rightPWM = speedPWM;
+        rightPWM = (int16_t)speedPWM;
     }
 }
 

@@ -79,8 +79,8 @@
 // ---- Public data produced by this module -----------------------------
 struct InputState
 {
-    uint8_t  leftPWM;      // 0-255, final left motor duty (forward only)
-    uint8_t  rightPWM;     // 0-255, final right motor duty (forward only)
+    int16_t  leftPWM;      // -255..255, sign = direction, magnitude = duty
+    int16_t  rightPWM;     // -255..255, sign = direction, magnitude = duty
     uint8_t  speedPWM;     // 0-255, raw pot ceiling before steering is applied - for the display
     int8_t   steerSteps;   // clamped +/-STEER_MAX_STEPS - for the display
     uint8_t  buttons;      // bitmask, see packet.h BTN_* defines

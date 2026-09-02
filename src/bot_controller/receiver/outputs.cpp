@@ -19,9 +19,6 @@ void outputs_init()
 
 void outputs_update(const ControlPacket &packet)
 {
-    // Disarmed always means stopped, regardless of link health. This
-    // drops STBY - the driver chip itself goes to standby, not just
-    // the PWM duty.
     if (!packet.armed)
     {
         outputs_failsafe();
@@ -31,16 +28,21 @@ void outputs_update(const ControlPacket &packet)
 
     digitalWrite(PIN_STBY, HIGH);   // enable driver
 
-    // Forward-only: direction pins fixed, PWM carries the speed.
-    digitalWrite(PIN_AIN1, HIGH);
-    digitalWrite(PIN_AIN2, LOW);
-    digitalWrite(PIN_BIN1, HIGH);
-    digitalWrite(PIN_BIN2, LOW);
+    int16_t left  = packet.leftPWM;
+    int16_t right = packet.rightPWM;
 
-    ledcWrite(PIN_PWMA, packet.leftPWM);
-    ledcWrite(PIN_PWMB, packet.rightPWM);
+    digitalWrite(PIN_AIN1, left  >= 0 ? HIGH : LOW);
+    digitalWrite(PIN_AIN2, left  >= 0 ? LOW  : HIGH);
+    digitalWrite(PIN_BIN1, right >= 0 ? HIGH : LOW);
+    digitalWrite(PIN_BIN2, right >= 0 ? LOW  : HIGH);
 
-    Serial.printf("armed=1 L=%3u R=%3u\n", packet.leftPWM, packet.rightPWM);
+    uint8_t leftDuty  = (uint8_t)min((int)abs(left),  255);
+    uint8_t rightDuty = (uint8_t)min((int)abs(right), 255);
+
+    ledcWrite(PIN_PWMA, leftDuty);
+    ledcWrite(PIN_PWMB, rightDuty);
+
+    Serial.printf("armed=1 L=%4d R=%4d\n", (int)left, (int)right);
 }
 
 void outputs_failsafe()

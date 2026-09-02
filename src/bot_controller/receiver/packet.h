@@ -8,7 +8,12 @@
 // v2: throttle/steering (raw stick axes) replaced with leftPWM/rightPWM
 // (final, ready-to-drive PWM duty per side) now that speed comes from
 // a potentiometer and steering from a rotary encoder on the transmitter.
-#define PACKET_VERSION 2
+// v3: leftPWM/rightPWM changed from uint8_t to int16_t. Sign now
+// carries direction, magnitude carries duty (0-255). Needed for tank-
+// turn: the inner wheel now reverses past half steering lock instead
+// of just tapering toward zero, and idle-throttle + full steer drives
+// both wheels in opposite directions for an in-place pivot.
+#define PACKET_VERSION 3
 
 // Button bitmask positions (example layout, expand as needed)
 #define BTN_A      (1 << 0)
@@ -22,8 +27,8 @@
 struct __attribute__((packed)) ControlPacket
 {
     uint8_t  version;        // PACKET_VERSION, used for sanity checking
-    uint8_t  leftPWM;        // 0-255, final left motor PWM duty (forward only)
-    uint8_t  rightPWM;       // 0-255, final right motor PWM duty (forward only)
+    int16_t  leftPWM;        // -255..255, sign = direction, magnitude = duty
+    int16_t  rightPWM;       // -255..255, sign = direction, magnitude = duty
     uint8_t  buttons;        // bitmask, see BTN_* defines above
     uint8_t  mode;           // flight/drive mode selector
     uint8_t  armed;          // 0 = disarmed, 1 = armed

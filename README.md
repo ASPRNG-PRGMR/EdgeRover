@@ -2,7 +2,7 @@
 
 A 4-wheeled robot learning to drive itself — starting with a human on the stick, ending with the rover following a person around a room on vision alone.
 
-> **Current Status:** Manual control (ESP-NOW, tank-turn + in-place pivot) is code-complete and compiles clean — bench testing pending, blocked on hardware access. Electrical rework is done: motor-load resets traced to EN-pin noise coupling (not brownout) and fixed via BEC-unified logic rail + EN-pin cap + motor snubbers + star ground. Next up: AprilTag-based visual following.
+> **Current Status:** Manual control (ESP-NOW, tank-turn + in-place pivot) is code-complete and compiles clean — bench testing pending, blocked on hardware access. Electrical rework is done: motor-load resets traced to EN-pin noise coupling (not brownout) and fixed via BEC-unified logic rail + EN-pin cap + motor snubbers + star ground. AprilTag follower firmware (ESP32-S3-CAM + OV3660 + SG90 camera tilt, Pythagoras ground-distance model, 50 Hz sender task) is written and compiles clean — untested on hardware; calibration + bench test are next. Geometry check says a flat pocket tag is not decodable from 15 cm at chassis height, so the tag needs a ~40° downward wedge or the camera a ~50 cm mast.
 
 <p align="center">
   <img src="images/car.jpg" alt="EdgeRover chassis" width="48%" />
@@ -82,120 +82,150 @@ One battery (12V), one regulator (5A BEC), but the BEC's output only ever touche
 
 | Layer | Tool |
 |---|---|
-| Framework | ESP-IDF (preferred over Arduino here — more control over camera driver + easier integration of a C detection library) |
-| Camera driver | `esp32-camera` (Espressif official component) |
-| AprilTag detection | Port of the UMich `apriltag` C library (or lighter ArUco-style detector if frame rate demands it) |
-| Motor control | ESP32 LEDC peripheral, PWM |
+| Framework | Arduino-ESP32 core 3.x (IDF 5 underneath); the vision board and both control boards build from the Arduino IDE / arduino-cli |
+| Camera driver | `esp32-camera` (bundled with the core) — OV3660, grayscale VGA straight from the sensor |
+| AprilTag detection | [raspiduino/apriltag-esp32](https://github.com/raspiduino/apriltag-esp32) — UMich `apriltag` 3 as an Arduino library (float math, tag36h11 trimmed to 35 IDs) |
+| Camera tilt | SG90 servo via the IDF LEDC driver (timer 1, so it cannot collide with the camera's XCLK on timer 0) |
+| Motor control | ESP32 LEDC peripheral, PWM, on the receiver board (`bot_controller/receiver`) |
+| Link | ESP-NOW, `ControlPacket` v3, 50 Hz from a dedicated task |
 
 ---
 
 ## Control Loop
 
+Two loops on the ESP32-S3-CAM, one per core:
+
 ```
-loop (target ~15–30 fps, camera-limited):
-    frame = capture_frame()
-    detections = apriltag_detect(frame)
+vision loop (core 1, camera/detector-limited, ~8-15 fps at VGA):
+    frame = capture_grayscale()
+    tag   = apriltag_detect(frame)            # filtered by ID / hamming / decision margin, largest wins
 
-    if len(detections) > 0:
-        tag = pick_best(detections)      # e.g., largest / highest confidence
-        cx, cy = tag.center
-        size_px = tag.apparent_size
-
-        steer_error = compute_steer_error(cx, frame_width)
-        distance_est = estimate_distance(size_px)
-
-        if distance_est <= STOP_DISTANCE:
-            motors.stop()
-        else:
-            speed = compute_speed(distance_est)
-            turn  = compute_turn(steer_error)
-            motors.drive(speed, turn)
+    if tag:
+        range = range_model(tag, servo_tilt)  # slant → rotate by tilt → Pythagoras → ground, bearing
+        cmd   = tracker(range)                # hysteresis stop/resume, slow zone, back-off, steer, pivot
+        servo_target += TILT_KP × tag.in_frame_elevation   # keep the tag vertically centred
     else:
-        motors.stop()   # v1 default; frame-exit-direction logic is a planned upgrade
+        cmd = lost_behaviour()                # hold last cmd → pivot toward last side → stop + search tilt
+
+    publish(cmd, armed = seen_a_tag_ever)
+    servo_step()                              # rate-limited move toward servo_target
+
+sender task (core 0, 50 Hz, independent of frame rate):
+    cmd = latest published command (zeros if older than 400 ms)
+    cmd = slew_limit(cmd)                     # soft ramps, fast decel
+    espnow_send(ControlPacket{cmd, armed})    # keeps the receiver's 200 ms failsafe fed
 ```
+
+The receiver-side loop is unchanged from manual control: it drives whatever `leftPWM`/`rightPWM` it last received and fails safe 200 ms after the last packet.
 
 ---
 
 ## Math Reference
 
-### Steering error
+Implemented in `range_model.cpp` (geometry) and `tracker_control.cpp` (control). Frame convention: image x right, y **down**; rover frame x right, y **up**, z forward, origin at the lens.
+
+### Slant range from apparent tag size (pinhole camera model)
 
 ```
-frame_center_x = W / 2
-error_x = cx - frame_center_x
-error_x_norm = error_x / (W / 2)        # -1.0 (full left) to +1.0 (full right)
+slant_r = REAL_TAG_SIZE_CM × FOCAL_LENGTH_PX / size_px
 ```
 
-`error_x > 0` → tag right of center → steer right. `|error_x| < deadzone` → go straight (start deadzone ≈ 5% of frame width to kill jitter).
+`size_px` is the larger of (mean horizontal edge, mean vertical edge) of the detected quad — foreshortening only ever shrinks an edge, so this stays close to the true side length when the camera looks steeply up at the tag or the person half-turns. `FOCAL_LENGTH_PX` scales with frame width and is calibrated with `model/fit_camera_model.py`.
 
-### Turn command (proportional, optionally PD)
-
-```
-turn = Kp * error_x_norm
-turn = Kp * error_x_norm + Kd * (error_x_norm - prev_error_x_norm) / dt   # if oscillation appears
-```
-
-Tune `Kp` empirically, starting ~0.3–0.5.
-
-### Distance from apparent tag size (pinhole camera model)
+### In-frame angles
 
 ```
-distance = (real_tag_size × focal_length_px) / apparent_tag_size_px
+dx = cx − W/2            dy = cy − H/2
+in_frame_bearing   = atan2( dx, f)          # + = tag right of centre
+in_frame_elevation = atan2(−dy, f)          # + = tag above centre  → drives the tilt servo
 ```
 
-- `real_tag_size` — physical side length of the printed tag (fixed, measured once)
-- `focal_length_px` — camera focal length in pixels (calibrate below)
-- `apparent_tag_size_px` — measured tag side length in the current frame
+### Camera tilt → rover frame, then Pythagoras (the servo's job)
 
-**Calibration (one-time):** place tag at known distance `D_known`, measure `apparent_tag_size_px`, then:
+The pinhole gives distance *along the line of sight*. Near the person the rover is looking steeply up at a pocket-height tag, so the slant range is dominated by height, not horizontal distance. With the camera pitched up by the servo tilt τ:
 
 ```
-focal_length_px = (apparent_tag_size_px × D_known) / real_tag_size
+v_cam   = slant_r × unit(dx, −dy, f)                # vector to the tag in the camera frame (y up)
+x_r     = x_cam
+y_r     = y_cam·cos τ + z_cam·sin τ                  # vertical leg   (height above the lens)
+z_r     = −y_cam·sin τ + z_cam·cos τ
+
+height  = y_r
+ground  = sqrt(slant_r² − height²) = sqrt(x_r² + z_r²)   # horizontal leg — what the stop logic uses
+bearing = atan2(x_r, z_r)                                # heading error, + = right
+elevation = atan2(height, ground)
 ```
 
-### Speed mapping (smooth deceleration on approach)
+Sanity value: `height` should equal `TAG_HEIGHT_CM − CAMERA_HEIGHT_CM` at every distance. Worked example at the heels: rise 73 cm, ground 15 cm → slant 74.5 cm, elevation 78°; the pinhole alone would say "75 cm away", Pythagoras says 15.
+
+Optional (`USE_POSE_ESTIMATE 1`): `v_cam` comes from the library's homography pose solver instead of the size model; everything after step one is identical.
+
+### Tilt servo
 
 ```
-if distance <= STOP_DISTANCE:      speed = 0
-elif distance <= SLOW_DISTANCE:    speed = map(distance, STOP_DISTANCE, SLOW_DISTANCE, MIN_SPEED, MAX_SPEED)
-else:                              speed = MAX_SPEED
-
-map(x, in_min, in_max, out_min, out_max) =
-    (x - in_min) × (out_max - out_min) / (in_max - in_min) + out_min
+tilt_target = tilt_now + TILT_KP × in_frame_elevation      (deadzone TILT_DEADZONE_DEG)
+tilt_now   += clamp(tilt_target − tilt_now, ±TILT_RATE_DEG_PER_S × dt)
+servo_deg   = SERVO_LEVEL_DEG + SERVO_UP_SIGN × tilt_now    → 500-2500 µs pulse at 50 Hz
 ```
 
-### "Target has stopped" detection
+### Turn command (P, optionally PD, on rover-frame bearing)
 
 ```
-size_history = [last N frames of apparent_tag_size_px]     # e.g., N = 10 @ 20fps
-variance = statistical_variance(size_history)
-
-if variance < STILL_THRESHOLD and distance > STOP_DISTANCE:
-    motors.stop()   # target present but not moving — hold
+turn = STEER_KP × bearing_deg  [+ STEER_KD × d(bearing)/dt]      clamped to ±1, 0 inside STEER_DEADZONE_DEG
 ```
 
-### PWM duty (ESP32 LEDC) + differential drive mixing
+Default `STEER_KP 0.03`/deg: inner wheel stops at ~17° bearing, full lock at ~33° (the VGA field of view is ±28°).
+
+### Speed from ground distance (hysteresis, slow zone, back-off)
 
 ```
-duty_value = speed_fraction × (2^resolution_bits - 1)
+if ground <= MIN_FOLLOW_DISTANCE_CM:  holding = true        # 15 cm
+if ground >= RESUME_DISTANCE_CM:      holding = false       # 25 cm — no chatter at the boundary
 
-left_speed  = clamp(speed - turn, MIN_PWM, MAX_PWM)
-right_speed = clamp(speed + turn, MIN_PWM, MAX_PWM)
+if ground <  BACKOFF_DISTANCE_CM:     both wheels = −BACKOFF_PWM       # person stepped into us
+elif holding:                         speed = 0  (pivot allowed if |turn| > deadzone)
+elif ground <  SLOW_DISTANCE_CM:      speed = map(ground, MIN_FOLLOW, SLOW, MIN_MOVING_PWM/ceiling, 1) × ceiling
+else:                                 speed = ceiling
+
+ceiling = MAX_PWM_CEILING, or UNCALIBRATED_PWM_CAP while FOCAL_IS_CALIBRATED == 0
 ```
 
-(Verify sign convention empirically against your wiring, then keep it consistent.)
+The earlier "target has stopped" variance heuristic was removed: with a real distance estimate, a person standing still simply means "drive up to 15 cm and hold".
+
+### Differential drive mixing (identical to `transmitter/inputs.cpp`)
+
+```
+speed == 0 and |turn| > deadzone  →  pivot: left = +p, right = −p (turn right), p = PIVOT_PWM_MIN..MAX × |turn|
+
+otherwise:  outer wheel = speed
+            inner wheel = speed × (1 − 2·|turn|)     # +1 centred → 0 at half lock → −1 (reverse) at full lock
+            turn > 0 → right wheel is inner
+```
+
+### Lost target
+
+```
+< LOST_HOLD_MS  (300 ms):   repeat last command
+< +LOST_PIVOT_MS (1.5 s):   pivot at LOST_PIVOT_PWM toward the side the tag was last seen on
+after:                      stop, camera to search tilt = atan2(TAG_HEIGHT − CAMERA_HEIGHT, TILT_SEARCH_RANGE_CM)
+```
 
 ---
 
 ## Constants Checklist (before first test)
 
-- [ ] `real_tag_size` — measured, cm
-- [ ] `focal_length_px` — calibrated per above
-- [ ] `STOP_DISTANCE`, `SLOW_DISTANCE`
-- [ ] `Kp` (and `Kd` if needed) — tune wheels-off-ground first
-- [ ] `deadzone` — start ~5% of frame width
-- [ ] `STILL_THRESHOLD`
-- [ ] `MIN_SPEED` / `MAX_SPEED` — respect motor driver + BEC current limits
+All in `src/vision_control/apriltag_follower/constants.h`; full procedure in [`src/vision_control/README.md`](./src/vision_control/README.md).
+
+- [ ] `REAL_TAG_SIZE_CM` — outer black border, measured
+- [ ] `TARGET_TAG_ID` — the printed ID (0–34)
+- [ ] `CAMERA_HEIGHT_CM` / `TAG_HEIGHT_CM` — and `model/follow_geometry.py` run with them (wedge or mast decided)
+- [ ] `SERVO_LEVEL_DEG` / `SERVO_UP_SIGN` — camera level at that angle, larger angle tilts up
+- [ ] `CAMERA_VFLIP` / `CAMERA_HMIRROR` — `bear` positive when the tag moves right, servo tilts up when it rises
+- [ ] `FOCAL_LENGTH_PX` + `FOCAL_IS_CALIBRATED 1` — from `model/fit_camera_model.py`
+- [ ] `MIN_FOLLOW_DISTANCE_CM` / `RESUME_DISTANCE_CM` / `SLOW_DISTANCE_CM`
+- [ ] `STEER_KP` (and `STEER_KD` if needed), `TILT_KP` — tune wheels-off-ground first
+- [ ] `MAX_PWM_CEILING` — start low; respect motor driver + BEC current limits
+- [ ] `RECEIVER_MAC` in `espnow_tx.cpp`
 
 ---
 
@@ -219,12 +249,13 @@ Robo race entry: square track, rounded corners — one side has an oil/slip sect
 
 ### 🔧 AprilTag Visual Following (In Progress)
 - Electrical rework: 4S + capacitor setup → 5A BEC (see [Electrical Architecture](#electrical-architecture))
-- `vision_control/apriltag_follower/` firmware written: camera capture, AprilTag (tag36h11) detection, steering/distance/still-target control math, forward-only PWM mixing, sends `ControlPacket` to the existing, unmodified `receiver/`
-- Remaining: vendor the AprilTag C library into the build, calibrate `REAL_TAG_SIZE_CM`/`FOCAL_LENGTH_PX`, tune `STEER_KP`/`STOP_DISTANCE_CM`/etc. in `constants.h`
+- `vision_control/apriltag_follower/` firmware written and compiling clean against ESP32 core 3.3.11 + raspiduino/apriltag-esp32: camera capture, AprilTag (tag36h11) detection, SG90 camera-tilt servo, slant-range + tilt → Pythagoras ground-distance model, distance hysteresis with 15 cm stop / gentle back-off, tank-turn + pivot mixing (signed v3 packets), lost-target hold/pivot/search, dedicated 50 Hz sender task so slow detections never trip the receiver's 200 ms failsafe
+- `vision_control/model/`: geometry check (`follow_geometry.py`) and focal-length fit (`fit_camera_model.py`) — no ML needed for this stage
+- Remaining: install the AprilTag library, print the tag, calibrate `FOCAL_LENGTH_PX`, confirm orientation flags and `SERVO_LEVEL_DEG` on the bench, then tune gains. Physical constraint found by the geometry model: a flat tag on a back pocket is not decodable from 15 cm at chassis height — pitch the tag down ~40° or raise the camera
 - Bench testing wheels-off-ground before first drive test
 
 ### 🔭 Future Extensions
-- Frame-exit reactive behavior: rover reacts differently depending on whether the tag exits frame left, right, or top (and whether it was shrinking or growing before it vanished) — disambiguates "target walked away" vs. "target got too close."
+- Frame-exit reactive behavior: the follower already pivots toward the side the tag was last seen on; still to do is using the tag's size trend before it vanished to disambiguate "target walked away" vs. "target got too close."
 - Hand/shoe-based following via a small trained model (Edge Impulse FOMO, deployed via ESP-DL) as an alternative to the AprilTag, once marker-following is solid.
 - Second onboard camera for rear-facing detection.
 - micro-ROS bridge — only if telemetry visualization on a PC or integration with a broader ROS-based system becomes a goal. Not required for the core following behavior.
@@ -233,7 +264,7 @@ Robo race entry: square track, rounded corners — one side has an oil/slip sect
 
 ## Drive Architecture
 
-Differential (tank) drive — two independently driven sides, pivot turns, no steering servo. The steering math (§ [Math Reference](#math-reference)) computes `left_speed`/`right_speed` directly from the tag's position and size; the receiver-side logic doesn't need to know or care that the numbers now come from vision instead of a rotary encoder.
+Differential (tank) drive — two independently driven sides, pivot turns, no steering servo (the only servo on the rover tilts the camera). The steering math (§ [Math Reference](#math-reference)) computes `left_speed`/`right_speed` directly from the tag's position and size; the receiver-side logic doesn't need to know or care that the numbers now come from vision instead of a rotary encoder.
 
 > **Conditional idea, not built:** a servo-actuated front axle for car-style (Ackermann) steering, toggled against tank drive via a mode switch, was considered for the competition's oil/slip section specifically. Not pursued unless confirmed allowed by competition rules — see [Competition Prep](#-competition-prep--tank-turn-steering-current-priority) in the Roadmap.
 
@@ -281,45 +312,45 @@ EdgeRover/
     │       ├── espnow_rx.cpp
     │       └── packet.h
     └── vision_control/
-        └── apriltag_follower/            # ESP32-S3-CAM: detects tag, drives receiver/ directly
-            ├── apriltag_follower.ino     # main loop: capture -> detect -> control -> send
-            ├── camera.h                  # esp32-camera init + grayscale frame capture
-            ├── camera.cpp
-            ├── tag_detector.h            # AprilTag (tag36h11) detection wrapper
-            ├── tag_detector.cpp
-            ├── tracker_control.h         # steering/distance/PWM mixing math
-            ├── tracker_control.cpp
-            ├── constants.h               # all tunables/calibration constants, uncalibrated by default
-            ├── packet.h                  # copied byte-identical from bot_controller/
-            ├── espnow_tx.h                # copied unchanged from bot_controller/transmitter/
-            └── espnow_tx.cpp
+        ├── README.md                     # setup, wiring, calibration, bench tests, tuning, troubleshooting
+        ├── apriltag_follower/            # ESP32-S3-CAM (N16R8 + OV3660): detects tag, tilts camera, drives receiver/ directly
+        │   ├── apriltag_follower.ino     # main loop: capture -> detect -> range model -> tracker -> publish -> tilt servo
+        │   ├── camera.h / camera.cpp     # esp32-camera init (ESP32S3_EYE pin map, OV3660 flip fix) + grayscale capture
+        │   ├── tag_detector.h / .cpp     # AprilTag (tag36h11) wrapper: filters, foreshortening-aware size, optional pose
+        │   ├── tilt_servo.h / .cpp       # SG90 camera tilt on GPIO21 (IDF LEDC timer 1, away from the camera's timer 0)
+        │   ├── range_model.h / .cpp      # slant range + servo tilt -> Pythagoras -> ground distance & bearing
+        │   ├── tracker_control.h / .cpp  # distance hysteresis, steering P(D), tank-turn/pivot mixing, lost-target logic
+        │   ├── command_sender.h / .cpp   # 50 Hz ESP-NOW task (core 0): slew limit + stale cut-off, keeps receiver out of failsafe
+        │   ├── constants.h               # all tunables/calibration constants
+        │   ├── packet.h                  # copied byte-identical from bot_controller/
+        │   ├── espnow_tx.h / .cpp        # copied unchanged from bot_controller/transmitter/
+        └── model/                        # measurement model tooling (no ML): geometry check + focal-length fit
+            ├── README.md
+            ├── follow_geometry.py        # per-distance viewing angle / pixel size table; shows where detection breaks
+            └── fit_camera_model.py       # least-squares FOCAL_LENGTH_PX (+ servo level offset) from tape-measure data
 ```
 
 > **Heads up:** `packet.h` must be byte-identical across every folder that sends or receives a `ControlPacket` — Arduino sketches don't share headers across folders, and this struct is sent over the wire raw (`__attribute__((packed))`). If you edit one copy, copy it into all the others, or boards will silently disagree about what a byte means.
 >
 > **`PACKET_VERSION` is now `3`:** `leftPWM`/`rightPWM` changed from `uint8_t` to `int16_t` (sign = direction, magnitude = duty) to support tank-turn's reverse-capable inner wheel and in-place pivot. Any copy of `packet.h` still on v2 (unsigned fields) is incompatible — mismatched transmitter/receiver builds won't just get rejected by the version check, they'll misinterpret the struct's byte layout entirely since the field widths changed.
 >
-> `vision_control/apriltag_follower/` reuses `bot_controller/receiver/` **as-is, unmodified** — the receiver only understands `leftPWM`/`rightPWM`, so it doesn't care whether those numbers came from the handheld transmitter or the onboard camera. Its own PWM mixing is still forward-only (v1) and hasn't been updated to emit signed/reverse values — worth keeping in mind if pivot-style behavior is ever wanted from the vision path too. `apriltag_follower/` additionally requires the UMich AprilTag C library vendored in separately (not included in this repo — see `tag_detector.cpp` for integration notes).
+> `vision_control/apriltag_follower/` reuses `bot_controller/receiver/` **as-is, unmodified** — the receiver only understands `leftPWM`/`rightPWM`, so it doesn't care whether those numbers came from the handheld transmitter or the onboard camera. The vision path emits the same signed v3 values (through-zero tank turn while moving, in-place pivot when stopped, gentle reverse back-off) using the same mixing formula as `transmitter/inputs.cpp`. `apriltag_follower/` additionally requires the [raspiduino/apriltag-esp32](https://github.com/raspiduino/apriltag-esp32) Arduino library (UMich AprilTag 3 with float math and a trimmed tag36h11 table — print an ID in 0..34) — see `tag_detector.cpp`.
 
 ---
 
 ## Getting Started
 
-**Dependencies:**
-- Arduino IDE (or arduino-cli) with ESP32 board support
-- `esp32-camera` component (Espressif)
-- UMich AprilTag C library, vendored separately — see the top comment in `tag_detector.cpp` for integration notes (not bundled in this repo)
+**Rover / manual link** (unchanged):
+1. Verify the power rail first: confirm BEC output voltage under load with motors connected, per [Electrical Architecture](#electrical-architecture).
+2. Flash `src/bot_controller/receiver/receiver.ino` to the onboard ESP32; note the MAC address it prints.
+3. Flash `src/bot_controller/transmitter/transmitter.ino` with that MAC in `espnow_tx.cpp` for manual driving.
 
-**Steps:**
-1. Verify power rail first: confirm BEC output voltage under load with motors connected, per [Electrical Architecture](#electrical-architecture), before flashing/running any vision code.
-2. Flash `src/bot_controller/receiver/receiver.ino` to the onboard ESP32 (unchanged from manual-control days), note the MAC address it prints.
-3. Set that MAC as `RECEIVER_MAC` in `src/vision_control/apriltag_follower/espnow_tx.cpp`.
-4. Print your AprilTag (tag36h11 family) at a known, fixed size — measure it precisely.
-5. Fill in `REAL_TAG_SIZE_CM` in `src/vision_control/apriltag_follower/constants.h`.
-6. Calibrate `FOCAL_LENGTH_PX` (known-distance method, see [Math Reference](#math-reference)) and set it in `constants.h`.
-7. Flash `src/vision_control/apriltag_follower/apriltag_follower.ino` to the ESP32-S3-CAM.
-8. Bench test wheels-off-ground — watch serial output, confirm computed `leftPWM`/`rightPWM` behave sensibly as the tag moves before trusting it near the floor.
-9. First drive test with `MAX_PWM_CEILING` in `constants.h` deliberately capped low, then tune `STEER_KP`/`STOP_DISTANCE_CM`/etc. from there.
+**Vision follower:** the complete walkthrough — servo wiring, board settings, library install, tag printing, orientation checks, focal-length calibration, bench test sequence, tuning table and troubleshooting — lives in [`src/vision_control/README.md`](./src/vision_control/README.md). Short version:
+
+1. Run `python3 src/vision_control/model/follow_geometry.py` with your camera and tag heights; pitch the tag ~40° down or mast the camera before building (a flat pocket tag is not decodable from 15 cm at chassis height).
+2. Wire the SG90 to GPIO21 / 5 V BEC / star ground. Install [raspiduino/apriltag-esp32](https://github.com/raspiduino/apriltag-esp32); board = ESP32S3 Dev Module, PSRAM = OPI, Flash = 16 MB, Partition = Huge APP.
+3. Print a tag36h11 tag (ID 0–34) on stiff card; set `REAL_TAG_SIZE_CM`, `TARGET_TAG_ID`, heights and servo mounting constants; put the receiver's MAC in `espnow_tx.cpp`.
+4. Flash `src/vision_control/apriltag_follower/apriltag_follower.ino`, run the bench tests wheels-off-ground, calibrate `FOCAL_LENGTH_PX`, then drive with `MAX_PWM_CEILING` capped low and tune.
 
 ---
 

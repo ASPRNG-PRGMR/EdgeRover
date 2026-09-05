@@ -11,14 +11,13 @@ struct GrayFrame
     int32_t  width;
     int32_t  height;
     int32_t  stride;   // bytes per row; equals width for tightly packed grayscale
-    uint8_t *buf;       // points into the camera driver's own frame buffer
-    void    *_fb;        // opaque camera_fb_t*, needed to release the buffer
+    uint8_t *buf;      // points into the camera driver's own frame buffer
+    void    *_fb;      // opaque camera_fb_t*, needed to release the buffer
 };
 
-// Call once in setup(). Configures the camera in 8-bit grayscale at
-// FRAME_WIDTH x FRAME_HEIGHT (see constants.h). Returns true on success.
-// TODO: verify pin_config against your specific ESP32-S3-CAM board —
-// pinouts vary between vendors even for "the same" board name.
+// Call once in setup(). Configures the OV3660 in 8-bit grayscale at
+// CAM_FRAMESIZE (see constants.h), applies the OV3660 orientation fix,
+// and double-buffers in PSRAM. Returns true on success.
 bool camera_init();
 
 // Blocking capture of one frame. Returns true and fills `out` on

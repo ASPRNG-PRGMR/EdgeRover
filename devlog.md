@@ -1043,3 +1043,22 @@ Manual control had two real gaps going into competition prep: no way to pivot in
 Reverse (as a standalone drive mode, independent of pivot) was considered and deliberately dropped — button pins A-D and the mode switch are all already spoken for or reserved, and the only free momentary input left was a joystick module's click-switch, which would have worked, but reverse itself wasn't judged useful enough for this track layout to justify adding a new control (and a new failure mode next to the arm/disarm switch) for it.
 
 **Lesson:** an unsigned "duty cycle" field in a wire protocol is a forward-only assumption baked in at the struct level, not just a UI limitation — no amount of tuning the mixing math on top of it can produce a real pivot or reverse until the underlying field can actually represent direction. Worth deciding signed-vs-unsigned deliberately up front on any field that might ever need to mean "the other way," rather than retrofitting it once the mixing logic already assumes 0 is the floor.
+
+---
+
+### AprilTag follower: proofread pass, servo tilt + Pythagoras range, sender task
+
+First full read of `vision_control/apriltag_follower/` before any hardware existed to test it on. It would not have built, and if it had, it would not have been safe:
+
+1. **`constants.h` had lost its `#ifndef` guard** — a stray `#endif` with no matching `#if`, so the very first include failed.
+2. **The sketch lived one folder too deep** (`apriltag_follower/apriltag_follower/apriltag_follower.ino`) with all the `.cpp`/`.h` files in the parent. Arduino only compiles what sits in the sketch folder itself, so none of the modules were part of the build.
+3. **Uncalibrated distance mapped to full speed.** `FOCAL_LENGTH_PX` defaulted to `0`, which the control code turned into "distance = infinite", which the speed map turned into 100 % duty with no stop condition. Now an uncalibrated build caps forward PWM (`UNCALIBRATED_PWM_CAP`) and the estimate still produces a stop.
+4. **"Target stopped moving" heuristic stopped the rover whenever the person stood still** — even 2 m away. It predated a working distance estimate; removed.
+5. **Signed PWM printed with `%u`.** Cosmetic, but reverse values showed as ~4 billion.
+6. **Receiver failsafe vs. detection time.** The receiver drops to failsafe 200 ms after the last packet, and AprilTag detection at VGA takes ~100-150 ms per frame on its own — one slow frame and the motors cut out. Packets now come from a dedicated 50 Hz FreeRTOS task on core 0 that repeats the last command, slew-limits PWM changes (softer starts are also kinder to the EN-pin noise problem), and zeroes the output if the vision loop stops feeding it for 400 ms.
+7. **LEDC timer collision.** esp32-camera generates the OV3660's 20 MHz XCLK on LEDC timer 0. The Arduino core 3.x `ledcAttach()` allocator only tracks its own channels, so attaching a 50 Hz servo through it can silently reprogram timer 0 and freeze the camera. The servo uses the IDF `ledc` driver on timer 1 / channel 2 explicitly.
+8. **`set_framesize()` after init in grayscale mode** is a documented way to get "frame buffer size mismatch" capture failures with esp32-camera. Removed; frame size is fixed in the init config. Added the OV3660 `set_vflip(1)` the stock example applies (the sensor is mounted upside-down on these boards).
+
+**The bigger finding was physical, not code.** The goal is "stop 15 cm behind the person" with the tag on a back pocket. Ran the geometry (`vision_control/model/follow_geometry.py`): camera ~12 cm up, tag ~85 cm up, so at 15 cm the line of sight is ~78° above horizontal — and a tag hanging flat on a pocket is then viewed ~78° off-normal. tag36h11 stops decoding somewhere past ~65-75°. Closest distance that actually works with that mounting is ~40 cm. Pitching the tag ~40° downward on a wedge, or masting the camera to ~50 cm, makes every distance from 10 cm out decodable. This is also *why* the servo matters: the pinhole range at the heels reads ~75 cm (slant), and only the tilt angle + Pythagoras turns that into 15 cm (ground).
+
+**Lesson:** run the viewing-angle / pixel-size numbers before choosing where a fiducial goes. A follower's hardest case is the close one, and "close" for a floor-level camera means "looking almost straight up at something edge-on" — no amount of detector tuning fixes a tag you can only see edge-on. And when a firmware folder has never been compiled, assume nothing: check the guard, the folder layout and the uncalibrated-defaults path before reading the control math.
